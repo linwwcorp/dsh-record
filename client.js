@@ -18,7 +18,6 @@ window.__ModuleLoader__.load({
       en: {
         panel: 'Alert records',
         'page.title': 'Alert records',
-        'page.subtitle': 'Organize alert libraries, templates, and records with image, video, and audio attachments.',
         'tree.title': 'Libraries',
         'tree.newRoot': 'New library',
         'tree.newChild': 'New child library',
@@ -35,12 +34,6 @@ window.__ModuleLoader__.load({
         'tree.selectHint': 'Select a library on the left to see its records and templates.',
         'header.templates': '{count} templates',
         'header.records': '{count} records',
-        'storage.data': 'Data storage',
-        'storage.files': 'File storage',
-        'storage.postgres': 'PostgreSQL',
-        'storage.local': 'Local files',
-        'storage.minio': 'MinIO',
-        'storage.directory': 'Local directory',
         'tabs.records': 'Records',
         'tabs.templates': 'Templates',
         'action.save': 'Save',
@@ -169,21 +162,10 @@ window.__ModuleLoader__.load({
         'state.databaseDownTitle': 'PostgreSQL is unavailable',
         'state.databaseDownBody': 'The Database connections plugin is installed, but PostgreSQL is unreachable.'
           + ' Check that connection, then retry. While the plugin is enabled, records are not read from local files.',
-        'settings.title': 'Alert records storage',
-        'settings.body': 'With the Database connections plugin, records live in PostgreSQL and attachments in MinIO.'
-          + ' Without it, both are stored in local files.',
-        'settings.databaseMode': 'Database plugin enabled: data is stored in PostgreSQL and attachments in MinIO.',
-        'settings.localMode': 'Database plugin not enabled: data is stored in a local data.json file and attachments in the local media directory.',
-        'settings.dataMode': 'Data storage',
-        'settings.mediaMode': 'Attachment storage',
-        'settings.note': 'This card is read-only. Enable or disable the Database connections plugin to change where data is stored.',
-        'settings.unavailable': 'Storage status is unavailable right now.',
-        'settings.loading': 'Loading storage status…',
       },
       zh: {
         panel: '预警记录',
         'page.title': '预警记录',
-        'page.subtitle': '集中管理预警库、模板和记录，支持图片、视频与音频附件。',
         'tree.title': '预警库',
         'tree.newRoot': '新建根库',
         'tree.newChild': '新建子库',
@@ -200,12 +182,6 @@ window.__ModuleLoader__.load({
         'tree.selectHint': '在左侧选择一个预警库，查看它的记录和模板。',
         'header.templates': '{count} 个模板',
         'header.records': '{count} 条记录',
-        'storage.data': '数据存储',
-        'storage.files': '文件存储',
-        'storage.postgres': 'PostgreSQL',
-        'storage.local': '本地文件',
-        'storage.minio': 'MinIO',
-        'storage.directory': '本地目录',
         'tabs.records': '记录',
         'tabs.templates': '模板',
         'action.save': '保存',
@@ -333,15 +309,6 @@ window.__ModuleLoader__.load({
         'state.databaseMissingBody': '本页通过 Database connections（数据库连接）插件读写 PostgreSQL。请在该插件中完成配置后重试。',
         'state.databaseDownTitle': 'PostgreSQL 暂时不可用',
         'state.databaseDownBody': '已安装 Database connections（数据库连接）插件，但当前无法连接 PostgreSQL。请在该插件中检查连接后重试。启用数据库插件时，数据不会回退到本地文件。',
-        'settings.title': '预警记录存储',
-        'settings.body': '启用 Database connections（数据库连接）插件时，数据写入 PostgreSQL，附件存入 MinIO；未启用时，数据写入本地 JSON 文件，附件保存在本地目录。',
-        'settings.databaseMode': '数据库插件已启用：数据保存在 PostgreSQL，附件保存在 MinIO。',
-        'settings.localMode': '数据库插件未启用：数据保存在本地 data.json，附件保存在本地 media 目录。',
-        'settings.dataMode': '数据存储',
-        'settings.mediaMode': '附件存储',
-        'settings.note': '此卡片为只读。启用或关闭 Database connections 插件即可切换存储方式。',
-        'settings.unavailable': '暂时无法读取存储状态。',
-        'settings.loading': '正在读取存储状态…',
       },
     }
 
@@ -988,18 +955,6 @@ window.__ModuleLoader__.load({
       return h('span', { className: 'dsh-record-badge', title },
         label === undefined || label === '' ? null : h('span', null, label),
         h('strong', null, value))
-    }
-
-    function StorageBadges({ t, mode, media }) {
-      return h(React.Fragment, null,
-        h(Badge, {
-          label: t('storage.data'),
-          value: mode === 'postgres' ? t('storage.postgres') : t('storage.local'),
-        }),
-        h(Badge, {
-          label: t('storage.files'),
-          value: media === 'minio' ? t('storage.minio') : t('storage.directory'),
-        }))
     }
 
     function SeverityBadge({ t, severity }) {
@@ -1748,54 +1703,6 @@ window.__ModuleLoader__.load({
       })
     }
 
-    function SettingsCard({ t }) {
-      const [status, setStatus] = useState('loading')
-      const [storage, setStorage] = useState(null)
-      const [error, setError] = useState(null)
-      useEffect(() => {
-        let active = true
-        const load = async () => {
-          try {
-            const data = await requestJson('GET', 'tree')
-            if (!active) return
-            setStorage({
-              mode: data.mode === 'postgres' ? 'postgres' : 'local',
-              media: data.media === 'minio' ? 'minio' : 'local',
-            })
-            setStatus('ready')
-          } catch (reason) {
-            if (!active) return
-            setStatus('error')
-            if (isStorageFailure(reason)) setError(t('state.databaseDownBody'))
-            else setError(failureText(reason, t, 'settings.unavailable'))
-          }
-        }
-        void load()
-        return () => { active = false }
-      }, [])
-      return h('section', { className: 'dsh-record-settings' },
-        h('h2', null, t('settings.title')),
-        h('p', null, t('settings.body')),
-        status === 'loading' ? h('p', { className: 'dsh-record-muted', role: 'status' }, t('settings.loading')) : null,
-        status === 'error' ? h('p', { className: 'dsh-record-form-error', role: 'alert' }, error) : null,
-        storage === null ? null : h('div', { className: 'dsh-record-settings-modes' },
-          h('div', { className: 'dsh-record-settings-mode' },
-            h('span', null, t('settings.dataMode')),
-            h(Badge, {
-              label: '',
-              value: storage.mode === 'postgres' ? t('storage.postgres') : t('storage.local'),
-            })),
-          h('div', { className: 'dsh-record-settings-mode' },
-            h('span', null, t('settings.mediaMode')),
-            h(Badge, {
-              label: '',
-              value: storage.media === 'minio' ? t('storage.minio') : t('storage.directory'),
-            }))),
-        storage === null ? null : h('p', null,
-          storage.mode === 'postgres' ? t('settings.databaseMode') : t('settings.localMode')),
-        h('p', { className: 'dsh-record-settings-note' }, t('settings.note')))
-    }
-
     function AlertRecordsPage(props) {
       const { t, openDatabasePlugin } = props
       const aliveRef = useAlive()
@@ -2352,10 +2259,10 @@ window.__ModuleLoader__.load({
               className: 'dsh-record-title',
               title: selectedNode === null ? undefined : selectedNode.name,
             }, selectedNode === null ? t('page.title') : selectedNode.name),
-            h('p', { className: 'dsh-record-subtitle' },
-              selectedNode === null || selectedNode.description === '' ? t('page.subtitle') : selectedNode.description),
+            selectedNode === null || selectedNode.description === ''
+              ? null
+              : h('p', { className: 'dsh-record-subtitle' }, selectedNode.description),
             h('div', { className: 'dsh-record-badges' },
-              storage === null ? null : h(StorageBadges, { t, mode: storage.mode, media: storage.media }),
               selectedNode === null
                 ? null
                 : h('span', { className: 'dsh-record-muted' },
@@ -2492,11 +2399,6 @@ window.__ModuleLoader__.load({
         locale: NS,
         inject: () => ({ openDatabasePlugin }),
       }, AlertRecordsPage))
-      ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
-        name: 'plugins.bundle.config',
-        key: 'dsh-record',
-        locale: NS,
-      }, SettingsCard))
     }
 
     return { inject: ['slots', 'locale'], apply }
