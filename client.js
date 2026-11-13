@@ -435,6 +435,41 @@ window.__ModuleLoader__.load({
   border-color: var(--dsw-alias-brand-primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent);
 }
+
+.dsh-record-select-wrap { position: relative; min-width: 0; }
+.dsh-record-select-control {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  box-sizing: border-box; width: 100%; min-width: 0; height: 32px;
+  padding: 0 10px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 10px;
+  outline: none; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.dsh-record-select-control:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dsh-record-select-control:focus-visible {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent);
+}
+.dsh-record-select-control:disabled { opacity: .55; cursor: default; }
+.dsh-record-select-control svg { flex: none; color: var(--dsw-alias-label-secondary); }
+.dsh-record-select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-record-select-menu {
+  box-sizing: border-box; margin: 0; padding: 5px; list-style: none; overflow: auto;
+  border: 0.5px solid var(--dsw-alias-border-l1); border-radius: 14px;
+  background: var(--dsw-alias-bg-overlay);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--dsw-alias-label-primary) 18%, transparent);
+}
+.dsh-record-select-option {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  box-sizing: border-box; width: 100%; min-height: 30px; padding: 5px 9px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--dsw-alias-label-primary);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.dsh-record-select-option[data-active='true'] { background: var(--dsw-alias-interactive-bg-hover); }
+.dsh-record-select-option[aria-selected='true'] {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);
+  color: var(--dsw-alias-brand-primary); font-weight: 600;
+}
+.dsh-record-select-option svg { flex: none; }
 .dsh-record-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 32px; padding: 0 12px; flex: none;
@@ -928,6 +963,7 @@ window.__ModuleLoader__.load({
       close: 'M4 4l8 8M12 4l-8 8',
       file: 'M9 1.8H4.6c-.5 0-.9.4-.9.9v10.6c0 .5.4.9.9.9h6.8c.5 0 .9-.4.9-.9V5.2L9 1.8Zm0 0v3.4h3.4',
       search: 'M7.2 2.5a4.7 4.7 0 1 0 0 9.4 4.7 4.7 0 0 0 0-9.4Zm3.4 8.1 2.9 2.9',
+      check: 'M3.2 8.3l3 3 6.6-6.7',
     }
 
     function Icon({ name, size = 14, className }) {
@@ -955,6 +991,139 @@ window.__ModuleLoader__.load({
       return h('span', { className: 'dsh-record-badge', title },
         label === undefined || label === '' ? null : h('span', null, label),
         h('strong', null, value))
+    }
+
+    /**
+     * Rounded dropdown standing in for a native select so the option list can be
+     * shaped with the page's own surfaces. The menu is viewport-positioned and
+     * flips above the control when there is not enough room below.
+     */
+    function Select({ id, value, options, onChange, disabled, ariaLabel }) {
+      const [open, setOpen] = useState(false)
+      const [activeIndex, setActiveIndex] = useState(0)
+      const [anchor, setAnchor] = useState(null)
+      const buttonRef = useRef(null)
+      const menuRef = useRef(null)
+      const selectedIndex = Math.max(0, options.findIndex(option => option.value === value))
+      const selected = options[selectedIndex]
+
+      useEffect(() => {
+        if (!open) return undefined
+        const measure = () => {
+          const button = buttonRef.current
+          if (button === null) return
+          const rect = button.getBoundingClientRect()
+          const wanted = Math.min(290, options.length * 34 + 10)
+          const below = window.innerHeight - rect.bottom - 16
+          const above = rect.top - 16
+          const openUp = below < wanted && above > below
+          const available = Math.max(96, Math.min(290, openUp ? above : below))
+          setAnchor({
+            left: Math.round(rect.left),
+            width: Math.round(rect.width),
+            maxHeight: Math.round(available),
+            ...(openUp ? { bottom: Math.round(window.innerHeight - rect.top + 4) } : { top: Math.round(rect.bottom + 4) }),
+          })
+        }
+        measure()
+        const onPointerDown = (event) => {
+          const target = event.target
+          if (buttonRef.current !== null && buttonRef.current.contains(target)) return
+          if (menuRef.current !== null && menuRef.current.contains(target)) return
+          setOpen(false)
+        }
+        const onViewportChange = () => measure()
+        window.addEventListener('resize', onViewportChange)
+        window.addEventListener('scroll', onViewportChange, true)
+        document.addEventListener('pointerdown', onPointerDown, true)
+        return () => {
+          window.removeEventListener('resize', onViewportChange)
+          window.removeEventListener('scroll', onViewportChange, true)
+          document.removeEventListener('pointerdown', onPointerDown, true)
+        }
+      }, [open, options.length])
+
+      const choose = (index) => {
+        const option = options[index]
+        if (option === undefined) return
+        setOpen(false)
+        onChange(option.value)
+        if (buttonRef.current !== null) buttonRef.current.focus()
+      }
+
+      const onKeyDown = (event) => {
+        if (disabled === true) return
+        if (!open) {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setActiveIndex(selectedIndex)
+            setOpen(true)
+          }
+          return
+        }
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); return }
+        if (event.key === 'Tab') { setOpen(false); return }
+        if (event.key === 'ArrowDown') {
+          event.preventDefault()
+          setActiveIndex(index => Math.min(index + 1, options.length - 1))
+          return
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault()
+          setActiveIndex(index => Math.max(index - 1, 0))
+          return
+        }
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(activeIndex) }
+      }
+
+      const menu = open && anchor !== null
+        ? h('ul', {
+          ref: menuRef,
+          className: 'dsh-record-select-menu',
+          role: 'listbox',
+          'aria-label': ariaLabel,
+          style: {
+            position: 'fixed',
+            left: `${String(anchor.left)}px`,
+            minWidth: `${String(anchor.width)}px`,
+            maxHeight: `${String(anchor.maxHeight)}px`,
+            zIndex: 1100,
+            ...(anchor.top === undefined ? { bottom: `${String(anchor.bottom)}px` } : { top: `${String(anchor.top)}px` }),
+          },
+        }, options.map((option, index) => h('li', { key: option.value === '' ? '__none' : option.value, role: 'none' },
+          h('button', {
+            type: 'button',
+            role: 'option',
+            className: 'dsh-record-select-option',
+            'aria-selected': option.value === value ? 'true' : 'false',
+            'data-active': index === activeIndex ? 'true' : 'false',
+            onMouseEnter: () => setActiveIndex(index),
+            onClick: () => choose(index),
+          },
+          h('span', null, option.label),
+          option.value === value ? h(Icon, { name: 'check', size: 11 }) : null))))
+        : null
+
+      return h('div', { className: 'dsh-record-select-wrap' },
+        h('button', {
+          ref: buttonRef,
+          id,
+          type: 'button',
+          className: 'dsh-record-select-control',
+          'aria-haspopup': 'listbox',
+          'aria-expanded': open ? 'true' : 'false',
+          'aria-label': ariaLabel,
+          disabled: disabled === true,
+          onClick: () => {
+            if (open) { setOpen(false); return }
+            setActiveIndex(selectedIndex)
+            setOpen(true)
+          },
+          onKeyDown,
+        },
+        h('span', { className: 'dsh-record-select-value' }, selected === undefined ? '' : selected.label),
+        h(Icon, { name: 'chevron', size: 10 })),
+        menu)
     }
 
     function SeverityBadge({ t, severity }) {
@@ -1263,12 +1432,13 @@ window.__ModuleLoader__.load({
                 onChange: (event) => setRow(row.clientId, { label: event.target.value }),
               })),
             h(Field, { label: t('template.dialog.fieldType'), htmlFor: `dsh-record-field-type-${row.clientId}` },
-              h('select', {
+              h(Select, {
                 id: `dsh-record-field-type-${row.clientId}`,
-                className: 'dsh-record-select',
                 value: row.type,
-                onChange: (event) => setRow(row.clientId, { type: event.target.value }),
-              }, FIELD_TYPES.map(type => h('option', { key: type, value: type }, fieldTypeLabel(t, type))))),
+                ariaLabel: t('template.dialog.fieldType'),
+                options: FIELD_TYPES.map(type => ({ value: type, label: fieldTypeLabel(t, type) })),
+                onChange: (next) => setRow(row.clientId, { type: next }),
+              })),
             h(Field, { label: t('template.dialog.fieldUnit'), htmlFor: `dsh-record-field-unit-${row.clientId}` },
               h('input', {
                 id: `dsh-record-field-unit-${row.clientId}`,
@@ -1507,25 +1677,25 @@ window.__ModuleLoader__.load({
         children: [
           h('div', { key: 'row', className: 'dsh-record-form-row' },
             h(Field, { label: t('record.dialog.template'), htmlFor: 'dsh-record-record-template' },
-              h('select', {
+              h(Select, {
                 id: 'dsh-record-record-template',
-                className: 'dsh-record-select',
                 value: templateId,
+                ariaLabel: t('record.dialog.template'),
                 disabled: busy || mode === 'edit',
-                onChange: (event) => changeTemplate(event.target.value),
-              },
-              templates.length === 0
-                ? h('option', { value: '' }, t('record.dialog.templatePlaceholder'))
-                : templates.map(item => h('option', { key: item.id, value: item.id }, item.name)))),
+                options: templates.length === 0
+                  ? [{ value: '', label: t('record.dialog.templatePlaceholder') }]
+                  : templates.map(item => ({ value: item.id, label: item.name })),
+                onChange: changeTemplate,
+              })),
             h(Field, { label: t('record.dialog.severity'), htmlFor: 'dsh-record-record-severity' },
-              h('select', {
+              h(Select, {
                 id: 'dsh-record-record-severity',
-                className: 'dsh-record-select',
                 value: severity,
+                ariaLabel: t('record.dialog.severity'),
                 disabled: busy,
-                onChange: (event) => setSeverity(event.target.value),
-              }, SEVERITIES.map(value => h('option', { key: value === '' ? 'none' : value, value },
-                severityLabel(t, value))))),
+                options: SEVERITIES.map(item => ({ value: item, label: severityLabel(t, item) })),
+                onChange: setSeverity,
+              })),
             h(Field, { label: t('record.dialog.occurredAt'), htmlFor: 'dsh-record-record-occurred' },
               h('input', {
                 id: 'dsh-record-record-occurred',
@@ -2058,15 +2228,14 @@ window.__ModuleLoader__.load({
           onClick: () => setTab('templates'),
         }, t('tabs.templates')))
       const recordsToolbar = h('div', { className: 'dsh-record-toolbar' },
-        h('label', { className: 'dsh-record-inline-field' },
+        h('div', { className: 'dsh-record-inline-field' },
           h('span', null, t('records.templateFilter')),
-          h('select', {
-            className: 'dsh-record-select',
+          h(Select, {
             value: templateFilter,
-            onChange: (event) => setTemplateFilter(event.target.value),
-          },
-          h('option', { value: '' }, t('records.allTemplates')),
-          templates.map(template => h('option', { key: template.id, value: template.id }, template.name)))),
+            ariaLabel: t('records.templateFilter'),
+            options: [{ value: '', label: t('records.allTemplates') }, ...templates.map(template => ({ value: template.id, label: template.name }))],
+            onChange: setTemplateFilter,
+          })),
         h('label', { className: 'dsh-record-inline-field dsh-record-search' },
           h('span', null, t('records.search')),
           h('input', {
