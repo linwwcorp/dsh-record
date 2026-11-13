@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Alert records",
+    "description": "Alert templates and alert records in a multi-level library tree. Numbers and text are stored in PostgreSQL or local files; images, video, and audio go to MinIO or the local disk."
+  }
+}
