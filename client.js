@@ -15,8 +15,7 @@ window.__ModuleLoader__.load({
     const DEFAULT_SIDEBAR_WIDTH = 272
     const MIN_SIDEBAR_WIDTH = 200
     const MAX_SIDEBAR_WIDTH = 720
-    const FIELD_TYPES = ['number', 'text', 'boolean', 'image', 'video', 'audio']
-    const MEDIA_TYPES = ['image', 'video', 'audio']
+    const FIELD_TYPES = ['number', 'text', 'boolean', 'file']
     const SEVERITIES = ['', 'low', 'medium', 'high', 'critical']
 
     const COPY = {
@@ -64,9 +63,7 @@ window.__ModuleLoader__.load({
         'field.type.number': 'Number',
         'field.type.text': 'Text',
         'field.type.boolean': 'Boolean',
-        'field.type.image': 'Image',
-        'field.type.video': 'Video',
-        'field.type.audio': 'Audio',
+        'field.type.file': 'File',
         'value.yes': 'Yes',
         'value.no': 'No',
         'templates.loading': 'Loading templates…',
@@ -227,9 +224,7 @@ window.__ModuleLoader__.load({
         'field.type.number': '数字',
         'field.type.text': '文本',
         'field.type.boolean': '布尔',
-        'field.type.image': '图片',
-        'field.type.video': '视频',
-        'field.type.audio': '音频',
+        'field.type.file': '文件',
         'value.yes': '是',
         'value.no': '否',
         'templates.loading': '正在读取模板…',
@@ -760,6 +755,8 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-secondary); font-size: 11px;
 }
 .dsh-record-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-record-file-open { color: var(--dsw-alias-link); text-decoration: none; }
+.dsh-record-file-open:hover { text-decoration: underline; }
 .dsh-record-file-input { max-width: 100%; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; }
 .dsh-record-section-title { margin: 2px 0 0; color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 600; }
 .dsh-record-detail-head { display: grid; gap: 4px; }
@@ -905,9 +902,7 @@ window.__ModuleLoader__.load({
       if (type === 'number') return t('field.type.number')
       if (type === 'text') return t('field.type.text')
       if (type === 'boolean') return t('field.type.boolean')
-      if (type === 'image') return t('field.type.image')
-      if (type === 'video') return t('field.type.video')
-      if (type === 'audio') return t('field.type.audio')
+      if (type === 'file') return t('field.type.file')
       return String(type)
     }
 
@@ -917,13 +912,6 @@ window.__ModuleLoader__.load({
       if (severity === 'high') return t('severity.high')
       if (severity === 'critical') return t('severity.critical')
       return t('severity.none')
-    }
-
-    function acceptFor(type) {
-      if (type === 'image') return 'image/*'
-      if (type === 'video') return 'video/*'
-      if (type === 'audio') return 'audio/*'
-      return '*/*'
     }
 
     function toLocalInput(value) {
@@ -1004,7 +992,7 @@ window.__ModuleLoader__.load({
       const fields = template !== null && template !== undefined && Array.isArray(template.fields) ? template.fields : []
       const values = record.values !== null && typeof record.values === 'object' ? record.values : {}
       for (const field of fields) {
-        if (MEDIA_TYPES.includes(field.type)) continue
+        if (field.type === 'file') continue
         const value = values[field.key]
         if (value === undefined || value === null || String(value).trim() === '') continue
         const text = field.type === 'boolean' ? t(value === true ? 'value.yes' : 'value.no') : String(value)
@@ -1555,7 +1543,7 @@ window.__ModuleLoader__.load({
       })
     }
 
-    function MediaEditor({ t, field, items, disabled, uploading, onPick, onRemove }) {
+    function FileEditor({ t, field, items, disabled, uploading, onPick, onRemove }) {
       const label = String(field.label)
       return h('div', { className: 'dsh-record-dynamic-item' },
         h('div', { className: 'dsh-record-field-label' }, label),
@@ -1577,7 +1565,6 @@ window.__ModuleLoader__.load({
         h('input', {
           type: 'file',
           className: 'dsh-record-file-input',
-          accept: acceptFor(field.type),
           multiple: true,
           disabled,
           'aria-label': label,
@@ -1853,7 +1840,7 @@ window.__ModuleLoader__.load({
                         onChange: (next) => setFieldValue(field.key, next),
                       })))
                 }
-                return h(MediaEditor, {
+                return h(FileEditor, {
                   key: field.key,
                   t,
                   field,
@@ -1903,11 +1890,21 @@ window.__ModuleLoader__.load({
             preload: 'metadata',
           })
         }
+        if (file.kind === 'pdf') {
+          return h('a', {
+            className: 'dsh-record-file-chip dsh-record-file-open',
+            href: file.contentUrl,
+            target: '_blank',
+            rel: 'noreferrer',
+            title: file.name,
+          }, h(Icon, { name: 'file', size: 12 }),
+          h('span', { className: 'dsh-record-file-name' }, file.name))
+        }
         return h('span', { className: 'dsh-record-file-chip' }, h(Icon, { name: 'file', size: 12 }), file.name)
       }
       const renderValue = (field) => {
         const value = values[field.key]
-        if (MEDIA_TYPES.includes(field.type)) {
+        if (field.type === 'file') {
           const ids = Array.isArray(value) ? value : []
           const items = ids.map(id => filesById.get(id)).filter(file => file !== undefined)
           if (items.length === 0) {

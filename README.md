@@ -2,7 +2,7 @@
 
 中文 | [English](#english)
 
-一个 DeepSeek Harness 插件：**预警记录**。用多级目录（每个目录相当于一个库）组织预警模板和预警记录；模板字段支持数字、字符、布尔、图片、视频、音频；装了数据库插件就用 PostgreSQL + MinIO，没装就落本地文件和本地目录。
+一个 DeepSeek Harness 插件：**预警记录**。用多级目录（每个目录相当于一个库）组织预警模板和预警记录；模板字段支持数字、字符、布尔、文件；装了数据库插件就用 PostgreSQL + MinIO，没装就落本地文件和本地目录。
 
 ## 功能
 
@@ -13,21 +13,21 @@
   - `数字`：记录时填数值；
   - `字符`：文本；
   - `布尔`：记录时选是 / 否；
-  - `图片` / `视频` / `音频`：记录时上传媒体文件。
-- **预警记录**：选择模板填写标题、发生时间、等级（低 / 中 / 高 / 严重）、备注和字段值；图片可直接预览，视频和音频可在页面播放，所有媒体都能下载。
+  - `文件`：记录时上传任意文件，图片、视频、音频、PDF、Word 都可以。
+- **预警记录**：选择模板填写标题、发生时间、等级（低 / 中 / 高 / 严重）、备注和字段值；图片可直接预览，视频和音频可在页面播放，PDF 可直接打开，所有上传文件都能下载。
 - **检索与分页**：按模板筛选、按关键字搜索记录；记录按发生时间倒序排列，列表支持页码翻页和每页 20 / 50 / 100 条切换，接口与 Agent 工具同样支持 `limit` / `offset` 分页并返回总数。
 - **存储自动降级**：
-  - 检测到数据库插件（`dsh-database-config`）→ 目录、模板、记录、文件索引写入 **PostgreSQL**，媒体文件写入 **MinIO**；
-  - 没有数据库插件 → 上述数据写入 `$DSH_HOME/dsh-record/data.json`，媒体文件写入 `$DSH_HOME/dsh-record/media/`。
+  - 检测到数据库插件（`dsh-database-config`）→ 目录、模板、记录、文件索引写入 **PostgreSQL**，上传文件写入 **MinIO**；
+  - 没有数据库插件 → 上述数据写入 `$DSH_HOME/dsh-record/data.json`，上传文件写入 `$DSH_HOME/dsh-record/media/`。
   - 状态徽标会显示当前实际使用的存储方式。
-- **Agent 工具（14 个）**：目录 `list_alert_directories` / `create_alert_directory` / `update_alert_directory` / `delete_alert_directory`；模板 `list_alert_templates` / `create_alert_template` / `update_alert_template` / `delete_alert_template`；记录 `list_alert_records` / `get_alert_record` / `create_alert_record` / `update_alert_record` / `delete_alert_record`；媒体 `upload_alert_file`。
+- **Agent 工具（14 个）**：目录 `list_alert_directories` / `create_alert_directory` / `update_alert_directory` / `delete_alert_directory`；模板 `list_alert_templates` / `create_alert_template` / `update_alert_template` / `delete_alert_template`；记录 `list_alert_records` / `get_alert_record` / `create_alert_record` / `update_alert_record` / `delete_alert_record`；文件 `upload_alert_file`。
 
 ## 配置
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
 | `localDir` | 空 | 无数据库插件时的数据目录；留空使用 `$DSH_HOME/dsh-record` |
-| `maxUploadMb` | `200` | 单个媒体上传大小上限（MB） |
+| `maxUploadMb` | `200` | 单个上传文件大小上限（MB） |
 
 在 `cordis.patch.yml` 或插件配置里修改：
 
@@ -109,29 +109,29 @@ TypeScript 插件可以用 `import type {} from 'dsh-record'` 获得 `ctx.alertR
 | `getDirectory(id)` / `createDirectory(input)` / `updateDirectory(input)` / `deleteDirectory(id)` | 库目录 |
 | `getTemplate(id)` / `listTemplates(nodeId?)` / `createTemplate(input)` / `updateTemplate(input)` / `deleteTemplate(id)` | 预警模板 |
 | `getRecord(id)` / `listRecords(filter)` / `createRecord(input)` / `updateRecord(id, input)` / `deleteRecord(id)` | 预警记录 |
-| `uploadFile({ fieldKey, name, contentType, bytes })` | 上传图片/视频/音频，返回文件 id |
-| `fileResponse(request, download)` | 输出媒体响应（支持 Range） |
+| `uploadFile({ fieldKey, name, contentType, bytes })` | 上传任意文件（图片、视频、音频、PDF、Word 等），返回文件 id |
+| `fileResponse(request, download)` | 输出文件响应（支持 Range） |
 
 ### 给大模型（Agent Tools）
 
-插件注册 14 个模型工具，覆盖目录、模板、记录的完整增删改查和媒体上传：
+插件注册 14 个模型工具，覆盖目录、模板、记录的完整增删改查和文件上传：
 
 | 分类 | 工具 |
 | --- | --- |
 | 目录 | `list_alert_directories`、`create_alert_directory`、`update_alert_directory`、`delete_alert_directory` |
 | 模板 | `list_alert_templates`、`create_alert_template`、`update_alert_template`、`delete_alert_template` |
 | 记录 | `list_alert_records`（支持 `limit` / `offset` 分页，返回 `total`、`offset`、`hasMore`）、`get_alert_record`、`create_alert_record`、`update_alert_record`、`delete_alert_record` |
-| 媒体 | `upload_alert_file`（base64 上传，返回文件 id 后可写入记录的媒体字段） |
+| 文件 | `upload_alert_file`（base64 上传，返回文件 id 后可写入记录的文件字段） |
 
-典型调用顺序：`list_alert_directories` → `list_alert_templates`（拿到字段 `key`）→ `create_alert_record`（`values` 按字段 key 传数字/字符/布尔）→ 需要附件时 `upload_alert_file` → `update_alert_record` 把文件 id 放进媒体字段的数组。
+典型调用顺序：`list_alert_directories` → `list_alert_templates`（拿到字段 `key`）→ `create_alert_record`（`values` 按字段 key 传数字/字符/布尔）→ 需要附件时 `upload_alert_file` → `update_alert_record` 把文件 id 放进文件字段的数组。
 
 ## 结构
 
 | 文件 | 作用 |
 | --- | --- |
-| `index.js` | Host：存储选择（PostgreSQL / 本地 JSON）、MinIO / 本地媒体、Fetch 路由、Agent 工具 |
+| `index.js` | Host：存储选择（PostgreSQL / 本地 JSON）、MinIO / 本地文件、Fetch 路由、Agent 工具 |
 | `index.d.ts` | 供其他 TypeScript 插件使用的 `alertRecords` 服务类型 |
-| `client.js` | 浏览器：侧边栏入口、库目录树、模板与记录页面、媒体上传与播放 |
+| `client.js` | 浏览器：侧边栏入口、库目录树、模板与记录页面、文件上传与预览 |
 | `cordis.patch.yml` | 插入 `dsh-record` 插件行 |
 | `locale/*.json` | 插件管理器中的标题与说明 |
 | `icon.svg` | 插件图标 |
@@ -150,7 +150,7 @@ TypeScript 插件可以用 `import type {} from 'dsh-record'` 获得 `ctx.alertR
 
 [中文](#dsh-record) | English
 
-A DeepSeek Harness plugin for **alert records**. Multi-level directories (each one acts as a library) organize alert templates and alert records. Template fields support numbers, text, booleans, images, video, and audio. With the database plugin the data goes to PostgreSQL and MinIO; without it everything stays in local files and directories.
+A DeepSeek Harness plugin for **alert records**. Multi-level directories (each one acts as a library) organize alert templates and alert records. Template fields support numbers, text, booleans, and files. With the database plugin the data goes to PostgreSQL and MinIO; without it everything stays in local files and directories.
 
 ## Features
 
@@ -161,12 +161,12 @@ A DeepSeek Harness plugin for **alert records**. Multi-level directories (each o
   - `number`;
   - `text`;
   - `boolean`: yes or no;
-  - `image`, `video`, and `audio` fields that take uploaded media.
-- **Alert records**: pick a template and fill in a title, occurrence time, severity (low / medium / high / critical), a note, and the field values. Images preview inline; video and audio play in the page; every file can be downloaded.
+  - `file`: any uploaded file, including images, video, audio, PDF, and Word documents.
+- **Alert records**: pick a template and fill in a title, occurrence time, severity (low / medium / high / critical), a note, and the field values. Images preview inline; video and audio play in the page; PDF files open in a new tab; every file can be downloaded.
 - **Search and paging**: filter records by template and search by keyword; newest occurrence first. The list pages through records with a page-size switch (20 / 50 / 100 per page), and both the HTTP API and the agent tools accept `limit` / `offset` pagination and return the full match count.
 - **Automatic storage fallback**:
-  - With the database plugin (`dsh-database-config`): directories, templates, records, and the file index go to **PostgreSQL**; media files go to **MinIO**.
-  - Without it: the same data goes to `$DSH_HOME/dsh-record/data.json` and media files to `$DSH_HOME/dsh-record/media/`.
+  - With the database plugin (`dsh-database-config`): directories, templates, records, and the file index go to **PostgreSQL**; uploaded files go to **MinIO**.
+  - Without it: the same data goes to `$DSH_HOME/dsh-record/data.json` and uploaded files to `$DSH_HOME/dsh-record/media/`.
   - Header badges always show the storage actually in use.
 - **Agent tools (14)**: directories `list_alert_directories`, `create_alert_directory`, `update_alert_directory`, `delete_alert_directory`; templates `list_alert_templates`, `create_alert_template`, `update_alert_template`, `delete_alert_template`; records `list_alert_records`, `get_alert_record`, `create_alert_record`, `update_alert_record`, `delete_alert_record`; media `upload_alert_file`.
 
@@ -247,29 +247,29 @@ TypeScript plugins can `import type {} from 'dsh-record'` to type `ctx.alertReco
 | `getDirectory(id)` / `createDirectory(input)` / `updateDirectory(input)` / `deleteDirectory(id)` | Directories |
 | `getTemplate(id)` / `listTemplates(nodeId?)` / `createTemplate(input)` / `updateTemplate(input)` / `deleteTemplate(id)` | Templates |
 | `getRecord(id)` / `listRecords(filter)` / `createRecord(input)` / `updateRecord(id, input)` / `deleteRecord(id)` | Records |
-| `uploadFile({ fieldKey, name, contentType, bytes })` | Store an image, video, or audio file and return its id |
+| `uploadFile({ fieldKey, name, contentType, bytes })` | Store any uploaded file (image, video, audio, PDF, Word, and so on) and return its id |
 | `fileResponse(request, download)` | Stream a stored file, honouring HTTP Range |
 
 ### For the model (Agent tools)
 
-The plugin registers 14 tools covering directory, template, and record CRUD plus media upload:
+The plugin registers 14 tools covering directory, template, and record CRUD plus file upload:
 
 | Group | Tools |
 | --- | --- |
 | Directories | `list_alert_directories`, `create_alert_directory`, `update_alert_directory`, `delete_alert_directory` |
 | Templates | `list_alert_templates`, `create_alert_template`, `update_alert_template`, `delete_alert_template` |
 | Records | `list_alert_records` (accepts `limit` / `offset` pagination and returns `total`, `offset`, `hasMore`), `get_alert_record`, `create_alert_record`, `update_alert_record`, `delete_alert_record` |
-| Media | `upload_alert_file` (base64 upload; returns the file id to put in a media field) |
+| Files | `upload_alert_file` (base64 upload; returns the file id to put in a file field) |
 
-Typical order: `list_alert_directories` → `list_alert_templates` (read the field `key`s) → `create_alert_record` (pass numbers, strings, and booleans in `values`) → `upload_alert_file` for attachments → `update_alert_record` with the file id in the media field array.
+Typical order: `list_alert_directories` → `list_alert_templates` (read the field `key`s) → `create_alert_record` (pass numbers, strings, and booleans in `values`) → `upload_alert_file` for attachments → `update_alert_record` with the file id in the file field array.
 
 ## Layout
 
 | File | Role |
 | --- | --- |
-| `index.js` | Host: storage selection (PostgreSQL / local JSON), MinIO / local media, Fetch routes, Agent tools |
+| `index.js` | Host: storage selection (PostgreSQL / local JSON), MinIO / local files, Fetch routes, Agent tools |
 | `index.d.ts` | `alertRecords` service types for other TypeScript plugins |
-| `client.js` | Browser: sidebar entry, library tree, template and record pages, media upload and playback |
+| `client.js` | Browser: sidebar entry, library tree, template and record pages, file upload and preview |
 | `cordis.patch.yml` | Inserts the `dsh-record` plugin row |
 | `locale/*.json` | Title and description in the plugin manager |
 | `icon.svg` | Plugin icon |

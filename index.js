@@ -47,8 +47,10 @@ const MAX_FIELD_KEY = 64
 const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 500
 const DEFAULT_UPLOAD_MB = 200
-const FIELD_TYPES = ['number', 'text', 'boolean', 'image', 'video', 'audio']
-const MEDIA_KINDS = new Set(['image', 'video', 'audio'])
+const FIELD_TYPES = ['number', 'text', 'boolean', 'file']
+const FILE_KINDS = new Set(['image', 'video', 'audio', 'pdf', 'document', 'file'])
+/** Field types stored before files became one type; they read back as `file`. */
+const LEGACY_FILE_TYPES = new Set(['image', 'video', 'audio'])
 const SEVERITIES = ['', 'low', 'medium', 'high', 'critical']
 const NODE_TABLE = 'dsh_alert_nodes'
 const TEMPLATE_TABLE = 'dsh_alert_templates'
@@ -68,6 +70,9 @@ const CONTENT_TYPE_EXTENSIONS = {
   'audio/x-wav': '.wav',
   'audio/ogg': '.ogg',
   'audio/webm': '.weba',
+  'application/pdf': '.pdf',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
 }
 
 /**
@@ -221,7 +226,8 @@ function normalizeStoredField(value) {
   return {
     key: typeof value.key === 'string' ? value.key : '',
     label: typeof value.label === 'string' ? value.label : '',
-    type: FIELD_TYPES.includes(value.type) ? value.type : 'text',
+    type: FIELD_TYPES.includes(value.type) ? value.type
+      : LEGACY_FILE_TYPES.has(value.type) ? 'file' : 'text',
     required: value.required === true,
   }
 }
@@ -276,7 +282,7 @@ function normalizeFile(value) {
     id: String(value.id ?? ''),
     recordId: typeof value.recordId === 'string' ? value.recordId : '',
     fieldKey: typeof value.fieldKey === 'string' ? value.fieldKey : '',
-    kind: MEDIA_KINDS.has(value.kind) ? value.kind : kindOfContentType(contentType),
+    kind: FILE_KINDS.has(value.kind) ? value.kind : kindOfContentType(contentType),
     name: String(value.name ?? ''),
     contentType,
     sizeBytes: Number.isFinite(Number(value.sizeBytes)) ? Number(value.sizeBytes) : 0,
@@ -309,12 +315,15 @@ function databaseOf(ctx) {
   return database
 }
 
-/** @returns the media kind derived from a content type. */
+/** @returns the file kind derived from a content type. */
 function kindOfContentType(contentType) {
   const type = String(contentType).split(';')[0].trim().toLowerCase()
   if (type.startsWith('image/')) return 'image'
   if (type.startsWith('video/')) return 'video'
   if (type.startsWith('audio/')) return 'audio'
+  if (type === 'application/pdf') return 'pdf'
+  if (type === 'application/msword'
+    || type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'document'
   return 'file'
 }
 
@@ -451,11 +460,11 @@ function referencedFileIds(values) {
   return ids
 }
 
-/** @returns media files referenced by values, mapped to the owning field. */
+/** @returns files referenced by values, mapped to the owning field. */
 function collectMediaValues(values, fields) {
   const media = new Map()
   for (const field of fields) {
-    if (!MEDIA_KINDS.has(field.type)) continue
+    if (field.type !== 'file') continue
     const ids = values[field.key]
     if (!Array.isArray(ids)) continue
     for (const fileId of ids) {
@@ -469,16 +478,13 @@ function collectMediaValues(values, fields) {
   return media
 }
 
-/** Reject media ids that are unknown, of the wrong kind, or attached elsewhere. */
+/** Reject file ids that are unknown or already attached to another record. */
 function assertMediaFiles(media, files, recordId) {
   const byId = new Map(files.map(file => [file.id, file]))
-  for (const [fileId, field] of media) {
+  for (const fileId of media.keys()) {
     const file = byId.get(fileId)
     if (file === undefined) {
       throw new AlertError('invalid-input', `Uploaded file ${fileId} was not found; upload it again`, 400)
-    }
-    if (file.kind !== field.type) {
-      throw new AlertError('invalid-input', `File "${file.name}" is not a ${field.type} file`, 400)
     }
     if (file.recordId !== '' && file.recordId !== recordId) {
       throw new AlertError('file-in-use', `File "${file.name}" is already attached to another record`, 409)
@@ -2211,7 +2217,7 @@ function registerTools(ctx, service) {
           name: 'create_alert_template',
           description: 'Create one template that describes the fields of alert records in a directory. '
             + 'Fields define the form the page shows; a number field stores numbers, a text field stores strings, '
-            + 'a boolean field stores true or false, and image, video, and audio fields store uploaded file ids. '
+            + 'a boolean field stores true or false, and file fields store uploaded file ids. '
             + 'Use list_alert_directories first to find the directory id.',
           parameters: {
             nodeId: { type: 'string', required: true, description: 'Directory id that owns the template.' },
@@ -2234,7 +2240,7 @@ function registerTools(ctx, service) {
                     type: 'string',
                     required: true,
                     enum: FIELD_TYPES,
-                    description: 'Value type: number, text, boolean, image, video, or audio.',
+                    description: 'Value type: number, text, boolean, or file.',
                   },
                   required: {
                     type: 'boolean',
@@ -2353,7 +2359,7 @@ function registerTools(ctx, service) {
           description: 'Create one alert record from an existing template. '
             + 'Values are keyed by template field key: number fields take JSON numbers, text fields take strings, '
             + 'and boolean fields take true or false. '
-            + 'Omit image, video, and audio fields unless the files were uploaded with upload_alert_file and '
+            + 'Omit file fields unless the files were uploaded with upload_alert_file and '
             + 'will be passed as an array of file ids. Use list_alert_templates first to read the field keys.',
           parameters: {
             nodeId: { type: 'string', required: true, description: 'Directory id that owns the record.' },
@@ -2372,7 +2378,7 @@ function registerTools(ctx, service) {
             values: {
               type: 'json',
               description: 'Field values keyed by template field key. Number fields take JSON numbers, '
-                + 'text fields take strings, boolean fields take true or false, and media fields must be omitted.',
+                + 'text fields take strings, boolean fields take true or false, and file fields must be omitted.',
             },
           },
           output: {
@@ -2448,8 +2454,8 @@ function registerTools(ctx, service) {
 
         child.tools.register(defineTool({
           name: 'get_alert_record',
-          description: 'Read one alert record by id, including every field value and each stored image, video, '
-            + 'or audio file with its relative content and download URL. '
+          description: 'Read one alert record by id, including every field value and each stored file with '
+            + 'its relative content and download URL. '
             + 'Use list_alert_records first to find the record id.',
           parameters: {
             id: { type: 'string', required: true, description: 'Alert record id.' },
@@ -2513,7 +2519,7 @@ function registerTools(ctx, service) {
           name: 'update_alert_record',
           description: 'Update one alert record. Omitted fields keep their value. A supplied `values` object '
             + 'replaces the whole value map, keyed by template field key; number fields take numbers, text '
-            + 'fields take strings, and boolean fields take true or false. Media fields take arrays of file ids '
+            + 'fields take strings, and boolean fields take true or false. File fields take arrays of file ids '
             + 'returned by upload_alert_file. Use get_alert_record first to read the current values.',
           parameters: {
             id: { type: 'string', required: true, description: 'Alert record id from list_alert_records.' },
@@ -2684,13 +2690,18 @@ function registerTools(ctx, service) {
 
         child.tools.register(defineTool({
           name: 'upload_alert_file',
-          description: 'Upload one image, video, or audio file for an alert record and return its file id. '
-            + 'Pass the id in a media field value (an array of ids) of create_alert_record or update_alert_record. '
+          description: 'Upload one file for an alert record and return its file id; images, video, audio, '
+            + 'PDF, Word, and other documents are all accepted. '
+            + 'Pass the id in a file field value (an array of ids) of create_alert_record or update_alert_record. '
             + '`data` is base64, with or without a data URL prefix. The content URLs in the result are relative '
             + 'to the Harness Web origin.',
           parameters: {
             data: { type: 'string', required: true, description: 'Base64 file bytes, optionally as a data URL.' },
-            contentType: { type: 'string', required: true, description: 'Media type, such as image/png or video/mp4.' },
+            contentType: {
+              type: 'string',
+              required: true,
+              description: 'Media type, such as image/png, application/pdf, or application/msword.',
+            },
             name: { type: 'string', description: 'Original file name, including its extension.' },
             fieldKey: { type: 'string', description: 'Template field key that will hold this file.' },
           },

@@ -27,7 +27,7 @@ export interface AlertField {
   /** Stable key record values are stored under. */
   key: string
   label: string
-  type: 'number' | 'text' | 'boolean' | 'image' | 'video' | 'audio'
+  type: 'number' | 'text' | 'boolean' | 'file'
   required: boolean
 }
 
@@ -43,12 +43,12 @@ export interface AlertTemplate {
   updatedAt: string
 }
 
-/** One stored image, video, or audio file. */
+/** One stored file, such as an image, video, audio clip, PDF, or Word document. */
 export interface AlertFile {
   id: string
   recordId: string
   fieldKey: string
-  kind: 'image' | 'video' | 'audio' | 'file'
+  kind: 'image' | 'video' | 'audio' | 'pdf' | 'document' | 'file'
   name: string
   contentType: string
   sizeBytes: number
@@ -70,7 +70,7 @@ export interface AlertRecord {
   severity: '' | 'low' | 'medium' | 'high' | 'critical'
   occurredAt: string
   note: string
-  /** Values keyed by template field key; media fields hold arrays of file ids. */
+  /** Values keyed by template field key; file fields hold arrays of file ids. */
   values: Record<string, number | string | string[]>
   files: AlertFile[]
   createdAt: string
