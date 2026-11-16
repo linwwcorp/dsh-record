@@ -116,6 +116,14 @@ window.__ModuleLoader__.load({
         'records.columnOccurred': 'Occurred',
         'records.columnValues': 'Values',
         'records.columnActions': 'Actions',
+        'records.selected': '{count} selected',
+        'records.clearSelection': 'Clear selection',
+        'records.batchDelete': 'Delete selected',
+        'records.batchDeleteTitle': 'Delete selected records?',
+        'records.batchDeleteBody': 'Deletes {count} selected records and their attachments. This cannot be undone.',
+        'records.selectAll': 'Select every record on this page',
+        'records.selectRow': 'Select “{title}”',
+        'records.batchFailed': '{count} of {total} records could not be deleted: {message}',
         'record.dialog.createTitle': 'New record',
         'record.dialog.editTitle': 'Edit record',
         'record.dialog.template': 'Template',
@@ -271,6 +279,14 @@ window.__ModuleLoader__.load({
         'records.columnOccurred': '发生时间',
         'records.columnValues': '字段摘要',
         'records.columnActions': '操作',
+        'records.selected': '已选 {count} 条',
+        'records.clearSelection': '取消选择',
+        'records.batchDelete': '批量删除',
+        'records.batchDeleteTitle': '批量删除记录？',
+        'records.batchDeleteBody': '将删除选中的 {count} 条记录及其附件，此操作无法撤销。',
+        'records.selectAll': '全选本页记录',
+        'records.selectRow': '选择“{title}”',
+        'records.batchFailed': '{count} / {total} 条记录删除失败：{message}',
         'record.dialog.createTitle': '新建记录',
         'record.dialog.editTitle': '编辑记录',
         'record.dialog.template': '模板',
@@ -594,6 +610,17 @@ window.__ModuleLoader__.load({
 .dsh-record-col-occurred { width: 18%; }
 .dsh-record-col-values { width: 24%; }
 .dsh-record-col-actions { width: 8%; }
+.dsh-record-col-select { width: 36px; }
+.dsh-record-checkbox-cell { width: 36px; text-align: center; }
+.dsh-record-checkbox-cell input { margin: 0; cursor: pointer; }
+.dsh-record-row-selected { background: color-mix(in srgb, var(--dsh-record-accent) 8%, transparent); }
+.dsh-record-selection-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 8px; padding: 8px 12px; border: 0.5px solid var(--dsh-record-accent); border-radius: 10px;
+  background: color-mix(in srgb, var(--dsh-record-accent) 10%, transparent);
+  color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 18px;
+}
+.dsh-record-selection-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dsh-record-row-title { font-weight: 500; overflow-wrap: anywhere; }
 .dsh-record-row-template {
   display: block; overflow: hidden; color: var(--dsw-alias-label-secondary);
@@ -1994,6 +2021,11 @@ window.__ModuleLoader__.load({
       const [deleteTarget, setDeleteTarget] = useState(null)
       const [deleteBusy, setDeleteBusy] = useState(false)
       const [deleteError, setDeleteError] = useState(null)
+      const [selectedRecordIds, setSelectedRecordIds] = useState([])
+      const [batchConfirm, setBatchConfirm] = useState(false)
+      const [batchBusy, setBatchBusy] = useState(false)
+      const [batchError, setBatchError] = useState(null)
+      const [batchNotice, setBatchNotice] = useState(null)
       const nodeMap = useMemo(() => {
         const map = new Map()
         for (const node of nodes) map.set(node.id, node)
@@ -2204,6 +2236,53 @@ window.__ModuleLoader__.load({
           if (aliveRef.current) setDeleteBusy(false)
         }
       }
+      const toggleRecordSelection = (id) => {
+        setSelectedRecordIds(current => current.includes(id)
+          ? current.filter(item => item !== id)
+          : [...current, id])
+      }
+      const toggleSelectAllRecords = () => {
+        setSelectedRecordIds(current => current.length === records.length && records.length > 0
+          ? []
+          : records.map(record => record.id))
+      }
+      const deleteSelectedRecords = async () => {
+        if (selectedRecordIds.length === 0) return
+        setBatchBusy(true)
+        setBatchError(null)
+        setBatchNotice(null)
+        const ids = [...selectedRecordIds]
+        const failures = []
+        for (const id of ids) {
+          try {
+            await requestJson('POST', 'records', { action: 'delete', id })
+          } catch (reason) {
+            if (isStorageFailure(reason)) {
+              if (aliveRef.current) {
+                setBatchBusy(false)
+                setBatchConfirm(false)
+                reportStorageFailure(reason)
+              }
+              return
+            }
+            failures.push({ id, message: reason.message || t('delete.failed') })
+          }
+        }
+        if (!aliveRef.current) return
+        setBatchBusy(false)
+        setBatchConfirm(false)
+        setSelectedRecordIds([])
+        if (failures.length > 0) {
+          const message = t('records.batchFailed', {
+            count: String(failures.length),
+            total: String(ids.length),
+            message: failures[0].message,
+          })
+          setBatchError(message)
+          setBatchNotice(message)
+        }
+        refresh()
+      }
       const renderTreeRows = (parentId, depth) => {
         if (depth > 32) return []
         const key = parentId === null ? '' : String(parentId)
@@ -2292,6 +2371,7 @@ window.__ModuleLoader__.load({
       useEffect(() => { void loadTree() }, [refreshToken])
       useEffect(() => { void loadTemplates(selectedId) }, [selectedId, refreshToken])
       useEffect(() => { void loadRecords(selectedId) }, [selectedId, templateFilter, query, refreshToken, recordsPage, recordsPageSize])
+      useEffect(() => { setSelectedRecordIds([]) }, [selectedId, templateFilter, query, recordsPage, recordsPageSize])
       useEffect(() => {
         if (queryDraft === query) return undefined
         const timer = window.setTimeout(() => { setRecordsPage(1); setQuery(queryDraft) }, 300)
@@ -2378,6 +2458,25 @@ window.__ModuleLoader__.load({
           title: templates.length === 0 ? t('record.dialog.noTemplate') : undefined,
           onClick: () => setRecordDialog({ mode: 'create', record: null }),
         }, h(Icon, { name: 'plus', size: 12 }), t('records.new')))
+      const selectionBar = selectedRecordIds.length === 0 ? null : h('div', {
+        className: 'dsh-record-selection-bar',
+        role: 'status',
+      },
+      h('span', null, t('records.selected', { count: String(selectedRecordIds.length) })),
+      h('div', { className: 'dsh-record-selection-actions' },
+        h('button', {
+          type: 'button',
+          className: 'dsh-record-small-button',
+          onClick: () => setSelectedRecordIds([]),
+        }, t('records.clearSelection')),
+        h('button', {
+          type: 'button',
+          className: 'dsh-record-small-button dsh-record-small-button-danger',
+          onClick: () => {
+            setBatchError(null)
+            setBatchConfirm(true)
+          },
+        }, h(Icon, { name: 'trash', size: 12 }), t('records.batchDelete'))))
       const recordsBody = recordsStatus === 'loading' && records.length === 0
         ? h('div', { className: 'dsh-record-panel' },
           h('div', { style: { padding: '12px' } }, h(Skeleton, { label: t('records.loading'), rows: 5 })))
@@ -2401,6 +2500,13 @@ window.__ModuleLoader__.load({
               h('table', { className: 'dsh-record-table' },
                 h('thead', null,
                   h('tr', null,
+                    h('th', { className: 'dsh-record-col-select' },
+                      h('input', {
+                        type: 'checkbox',
+                        checked: records.length > 0 && selectedRecordIds.length === records.length,
+                        'aria-label': t('records.selectAll'),
+                        onChange: toggleSelectAllRecords,
+                      })),
                     h('th', { className: 'dsh-record-col-title' }, t('records.columnTitle')),
                     h('th', { className: 'dsh-record-col-severity' }, t('records.columnSeverity')),
                     h('th', { className: 'dsh-record-col-template' }, t('records.columnTemplate')),
@@ -2411,7 +2517,15 @@ window.__ModuleLoader__.load({
                   const template = templateMap.get(record.templateId) ?? null
                   const summary = recordSummary(t, record, template)
                   const fileCount = Array.isArray(record.files) ? record.files.length : 0
-                  return h('tr', { key: record.id },
+                  const checked = selectedRecordIds.includes(record.id)
+                  return h('tr', { key: record.id, className: checked ? 'dsh-record-row-selected' : undefined },
+                    h('td', { className: 'dsh-record-checkbox-cell' },
+                      h('input', {
+                        type: 'checkbox',
+                        checked,
+                        'aria-label': t('records.selectRow', { title: record.title }),
+                        onChange: () => toggleRecordSelection(record.id),
+                      })),
                     h('td', null, h('span', { className: 'dsh-record-row-title', title: record.title }, record.title)),
                     h('td', null, h(SeverityBadge, { t, severity: record.severity })),
                     h('td', null, h('span', { className: 'dsh-record-row-template', title: record.templateName }, record.templateName)),
@@ -2571,6 +2685,16 @@ window.__ModuleLoader__.load({
           tab === 'records'
             ? h('div', { className: 'dsh-record-records' },
               recordsToolbar,
+              selectionBar,
+              batchNotice === null
+                ? null
+                : h('div', { className: 'dsh-record-banner', role: 'alert' },
+                  h('p', null, batchNotice),
+                  h('button', {
+                    type: 'button',
+                    className: 'dsh-record-small-button',
+                    onClick: () => setBatchNotice(null),
+                  }, t('action.close'))),
               h('div', { className: 'dsh-record-records-scroll' }, recordsBody),
               recordsPager)
             : h(React.Fragment, null, templatesToolbar, templatesBody))
@@ -2701,6 +2825,15 @@ window.__ModuleLoader__.load({
           template: detailsTemplate,
           onClose: () => setDetail(null),
         }),
+        batchConfirm ? h(ConfirmDialog, {
+          t,
+          title: t('records.batchDeleteTitle'),
+          body: t('records.batchDeleteBody', { count: String(selectedRecordIds.length) }),
+          busy: batchBusy,
+          error: batchError,
+          onCancel: () => { if (!batchBusy) { setBatchConfirm(false); setBatchError(null) } },
+          onConfirm: () => { void deleteSelectedRecords() },
+        }) : null,
         deleteTarget === null ? null : h(ConfirmDialog, {
           t,
           title: deleteTarget.kind === 'node'

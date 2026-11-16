@@ -7,6 +7,7 @@
 ## 功能
 
 - **多级目录**：左侧目录树可任意建子库（厂区 → 车间 → 设备），支持重命名、删除；删除目录会连带删除子目录、模板、记录和媒体文件。
+- **多选批量删除**：记录表支持勾选（表头全选本页），选中后出现「已选 N 条」操作条，确认后批量删除这些记录及其附件。
 - **可调分栏**：左侧目录栏和右侧内容之间可拖动分隔条调整宽度（键盘方向键也可微调，双击恢复默认），宽度会记住。
 - **预警模板**：每个库可以建多个模板，模板由若干字段组成：
   - `数字`：记录时填数值；
@@ -154,6 +155,7 @@ A DeepSeek Harness plugin for **alert records**. Multi-level directories (each o
 ## Features
 
 - **Multi-level directories**: build sub-libraries of any depth (site → workshop → device), rename and delete them. Deleting a directory also removes its sub-directories, templates, records, and media files.
+- **Multi-select batch delete**: tick records in the table (the header selects the whole page); a selection bar appears with the count and a delete action that removes the chosen records and their attachments after confirmation.
 - **Resizable split**: drag the separator between the directory column and the content to change the width (arrow keys also work when it has focus, and a double-click restores the default). The width is remembered.
 - **Alert templates**: each library holds any number of templates made of fields:
   - `number`;
