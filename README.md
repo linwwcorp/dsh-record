@@ -7,6 +7,7 @@
 ## 功能
 
 - **多级目录**：左侧目录树可任意建子库（厂区 → 车间 → 设备），支持重命名、删除；删除目录会连带删除子目录、模板、记录和媒体文件。
+- **可调分栏**：左侧目录栏和右侧内容之间可拖动分隔条调整宽度（键盘方向键也可微调，双击恢复默认），宽度会记住。
 - **预警模板**：每个库可以建多个模板，模板由若干字段组成：
   - `数字`：带单位（如 `℃`、`MPa`），记录时填数值；
   - `字符`：文本；
@@ -152,6 +153,7 @@ A DeepSeek Harness plugin for **alert records**. Multi-level directories (each o
 ## Features
 
 - **Multi-level directories**: build sub-libraries of any depth (site → workshop → device), rename and delete them. Deleting a directory also removes its sub-directories, templates, records, and media files.
+- **Resizable split**: drag the separator between the directory column and the content to change the width (arrow keys also work when it has focus, and a double-click restores the default). The width is remembered.
 - **Alert templates**: each library holds any number of templates made of fields:
   - `number` with an optional unit (such as `°C` or `MPa`);
   - `text`;

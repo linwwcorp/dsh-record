@@ -11,6 +11,10 @@ window.__ModuleLoader__.load({
     const DATABASE_BUNDLE = 'dsh-database-config'
     const MAX_FIELDS = 40
     const PAGE_SIZES = [20, 50, 100]
+    const SIDEBAR_WIDTH_KEY = 'dsh-record-sidebar-width'
+    const DEFAULT_SIDEBAR_WIDTH = 272
+    const MIN_SIDEBAR_WIDTH = 200
+    const MAX_SIDEBAR_WIDTH = 720
     const FIELD_TYPES = ['number', 'text', 'image', 'video', 'audio']
     const MEDIA_TYPES = ['image', 'video', 'audio']
     const SEVERITIES = ['', 'low', 'medium', 'high', 'critical']
@@ -20,6 +24,8 @@ window.__ModuleLoader__.load({
         panel: 'Alert records',
         'page.title': 'Alert records',
         'tree.title': 'Libraries',
+        'splitter.label': 'Resize the directory column',
+        'splitter.hint': 'Drag to resize, double-click to reset',
         'tree.newRoot': 'New library',
         'tree.newChild': 'New child library',
         'tree.rename': 'Rename',
@@ -175,6 +181,8 @@ window.__ModuleLoader__.load({
         panel: '预警记录',
         'page.title': '预警记录',
         'tree.title': '预警库',
+        'splitter.label': '调整目录栏宽度',
+        'splitter.hint': '拖动调整宽度，双击恢复默认',
         'tree.newRoot': '新建根库',
         'tree.newChild': '新建子库',
         'tree.rename': '重命名',
@@ -347,10 +355,27 @@ window.__ModuleLoader__.load({
 }
 .dsh-record-body { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .dsh-record-sidebar {
-  display: flex; flex-direction: column; flex: none; width: 272px; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; flex: none; min-width: 0; min-height: 0;
+  max-width: 60%;
   border-right: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-base);
 }
+.dsh-record-splitter {
+  position: relative; z-index: 2; flex: none; width: 7px; margin: 0 -3.5px;
+  cursor: col-resize; touch-action: none; background: transparent;
+}
+.dsh-record-splitter-grip {
+  position: absolute; top: 10px; bottom: 10px; left: 2px; width: 3px;
+  border-radius: 2px; background: transparent; transition: background .15s ease;
+}
+.dsh-record-splitter:hover .dsh-record-splitter-grip,
+.dsh-record-splitter:focus-visible .dsh-record-splitter-grip,
+.dsh-record-body[data-resizing='true'] .dsh-record-splitter-grip {
+  background: var(--dsh-record-accent);
+}
+.dsh-record-splitter:focus-visible { outline: none; }
+.dsh-record-body[data-resizing='true'] { cursor: col-resize; user-select: none; }
+.dsh-record-body[data-resizing='true'] * { user-select: none; }
 .dsh-record-sidebar-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 14px 14px 8px;
@@ -753,9 +778,10 @@ window.__ModuleLoader__.load({
 @media (max-width: 860px) {
   .dsh-record-body { flex-direction: column; overflow: auto; }
   .dsh-record-sidebar {
-    width: 100%; max-height: 38vh;
+    width: 100% !important; max-width: none; max-height: 38vh;
     border-right: none; border-bottom: 0.5px solid var(--dsw-alias-border-l1);
   }
+  .dsh-record-splitter { display: none; }
   .dsh-record-main { min-height: 0; overflow: visible; }
   .dsh-record-content { overflow: visible; padding-left: 16px; padding-right: 16px; }
   .dsh-record-content-fill { display: block; overflow: visible; padding-bottom: 40px; }
@@ -1915,12 +1941,27 @@ window.__ModuleLoader__.load({
       })
     }
 
+    /** @returns the remembered directory column width, clamped to the usable range. */
+    function readSidebarWidth() {
+      try {
+        const raw = window.localStorage.getItem(SIDEBAR_WIDTH_KEY)
+        const value = raw === null ? NaN : Number(raw)
+        if (!Number.isFinite(value)) return DEFAULT_SIDEBAR_WIDTH
+        return Math.min(Math.max(Math.round(value), MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH)
+      } catch (_storageUnavailable) {
+        return DEFAULT_SIDEBAR_WIDTH
+      }
+    }
+
     function AlertRecordsPage(props) {
       const { t, openDatabasePlugin } = props
       const aliveRef = useAlive()
       const treeGeneration = useRef(0)
       const templateGeneration = useRef(0)
       const recordGeneration = useRef(0)
+      const bodyRef = useRef(null)
+      const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
+      const [resizing, setResizing] = useState(false)
       const [treeStatus, setTreeStatus] = useState('loading')
       const [treeError, setTreeError] = useState(null)
       const [storage, setStorage] = useState(null)
@@ -1969,6 +2010,50 @@ window.__ModuleLoader__.load({
         if (!isStorageFailure(reason)) return false
         reportStorageFailure(reason)
         return true
+      }
+      const clampSidebarWidth = value => Math.min(Math.max(Math.round(value), MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH)
+      useEffect(() => {
+        try {
+          window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth))
+        } catch (_storageUnavailable) {
+          // The width still applies for this session when storage is unavailable.
+        }
+      }, [sidebarWidth])
+      /** Start a pointer drag that resizes the directory column. */
+      const startResize = (event) => {
+        const body = bodyRef.current
+        if (body === null) return
+        event.preventDefault()
+        const rect = body.getBoundingClientRect()
+        if (typeof event.currentTarget.setPointerCapture === 'function') {
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId)
+          } catch (_noPointerCapture) {
+            // Window listeners still track the drag without pointer capture.
+          }
+        }
+        setResizing(true)
+        const move = (moveEvent) => {
+          const maximum = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, rect.width - 320))
+          const next = Math.min(Math.max(moveEvent.clientX - rect.left, MIN_SIDEBAR_WIDTH), maximum)
+          setSidebarWidth(clampSidebarWidth(next))
+        }
+        const finish = () => {
+          setResizing(false)
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('pointerup', finish)
+          window.removeEventListener('pointercancel', finish)
+        }
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', finish)
+        window.addEventListener('pointercancel', finish)
+      }
+      /** Resize the directory column with the arrow keys while the separator has focus. */
+      const onSplitterKeyDown = (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+        event.preventDefault()
+        const step = event.shiftKey ? 48 : 16
+        setSidebarWidth(current => clampSidebarWidth(current + (event.key === 'ArrowRight' ? step : -step)))
       }
       const loadTree = async () => {
         const generation = ++treeGeneration.current
@@ -2208,7 +2293,10 @@ window.__ModuleLoader__.load({
         const timer = window.setTimeout(() => { setRecordsPage(1); setQuery(queryDraft) }, 300)
         return () => window.clearTimeout(timer)
       }, [queryDraft, query])
-      const treePane = h('aside', { className: 'dsh-record-sidebar' },
+      const treePane = h('aside', {
+        className: 'dsh-record-sidebar',
+        style: { width: `${String(sidebarWidth)}px` },
+      },
         h('div', { className: 'dsh-record-sidebar-head' },
           h('span', { className: 'dsh-record-sidebar-title' }, t('tree.title')),
           h('span', { className: 'dsh-record-muted' }, String(nodes.length))),
@@ -2547,8 +2635,26 @@ window.__ModuleLoader__.load({
               h('p', null, treeError === null ? t('error.generic') : treeError),
               h('div', { className: 'dsh-record-state-actions' }, stateActions))))
       }
+      const splitter = h('div', {
+        className: 'dsh-record-splitter',
+        role: 'separator',
+        'aria-orientation': 'vertical',
+        'aria-label': t('splitter.label'),
+        'aria-valuenow': sidebarWidth,
+        'aria-valuemin': MIN_SIDEBAR_WIDTH,
+        'aria-valuemax': MAX_SIDEBAR_WIDTH,
+        tabIndex: 0,
+        title: t('splitter.hint'),
+        onPointerDown: startResize,
+        onKeyDown: onSplitterKeyDown,
+        onDoubleClick: () => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH),
+      }, h('span', { className: 'dsh-record-splitter-grip', 'aria-hidden': 'true' }))
       return h('div', { className: 'dsh-record-page' },
-        h('div', { className: 'dsh-record-body' }, treePane, mainPane),
+        h('div', {
+          className: 'dsh-record-body',
+          ref: bodyRef,
+          'data-resizing': resizing ? 'true' : undefined,
+        }, treePane, splitter, mainPane),
         nodeDialog === null ? null : h(NodeDialog, {
           key: nodeDialog.mode === 'edit' && nodeDialog.target !== null
             ? `edit:${String(nodeDialog.target.id)}`
