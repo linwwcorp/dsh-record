@@ -2282,15 +2282,17 @@ function registerTools(ctx, service) {
 
         child.tools.register(defineTool({
           name: 'list_alert_records',
-          description: 'List alert records, newest occurrence first. '
-            + 'Returns each record id, directory id, template id and name, title, severity, occurred time, note, '
-            + 'field values, and file count. '
-            + 'Use the ids with delete_alert_record.',
+          description: 'List alert records, newest occurrence first, with limit and offset pagination. '
+            + 'Returns the full match count, the offset used, whether more records follow, and each record id, '
+            + 'directory id, template id and name, title, severity, occurred time, note, field values, and file count. '
+            + 'Call again with offset + limit to read the next page. Use the ids with get_alert_record, '
+            + 'update_alert_record, or delete_alert_record.',
           parameters: {
             nodeId: { type: 'string', description: 'Directory id to filter by.' },
             templateId: { type: 'string', description: 'Template id to filter by.' },
             query: { type: 'string', description: 'Case-insensitive text matched against title, note, and values.' },
-            limit: { type: 'integer', description: 'Maximum records to return, 1-200. Defaults to 50.' },
+            limit: { type: 'integer', description: 'Page size, 1-200. Defaults to 50.' },
+            offset: { type: 'integer', description: 'Records to skip before this page, 0 or greater. Defaults to 0.' },
           },
           output: {
             schema: {
@@ -2298,6 +2300,9 @@ function registerTools(ctx, service) {
               additionalProperties: false,
               properties: {
                 total: { type: 'integer', required: true },
+                offset: { type: 'integer', required: true },
+                limit: { type: 'integer', required: true },
+                hasMore: { type: 'boolean', required: true },
                 records: {
                   type: 'array',
                   required: true,
@@ -2309,23 +2314,36 @@ function registerTools(ctx, service) {
               type: 'text',
               text: value.total === 0
                 ? 'No alert records matched.'
-                : `Alert records (${String(value.records.length)} shown of ${String(value.total)}):\n`
+                : `Alert records (${String(value.offset + 1)}-${String(value.offset + value.records.length)} of ${String(value.total)}${value.hasMore ? ', more pages follow' : ', last page'}):\n`
                   + value.records.map(record => `- id=${record.id} title=${JSON.stringify(record.title)} severity=${record.severity || 'none'} occurred=${record.occurredAt} template=${JSON.stringify(record.templateName)} files=${String(record.fileCount)} values=${JSON.stringify(record.values)}`).join('\n'),
             }],
           },
-          presentCall: () => ({ card: 'generic', kind: 'search', title: 'List alert records' }),
+          presentCall: args => ({
+            card: 'generic',
+            kind: 'search',
+            title: args.offset !== undefined && args.offset > 0
+              ? `List alert records from offset ${String(args.offset)}`
+              : 'List alert records',
+          }),
           async execute(args, exec) {
             exec.signal.throwIfAborted()
             const limit = Math.min(Math.max(args.limit ?? 50, 1), 200)
+            const offset = Math.max(args.offset ?? 0, 0)
             const result = await service.listRecords({
               nodeId: args.nodeId ?? '',
               templateId: args.templateId ?? '',
               query: args.query ?? '',
               limit,
-              offset: 0,
+              offset,
             })
             exec.signal.throwIfAborted()
-            return { total: result.total, records: result.records.map(toolRecord) }
+            return {
+              total: result.total,
+              offset,
+              limit,
+              hasMore: offset + result.records.length < result.total,
+              records: result.records.map(toolRecord),
+            }
           },
         })),
 
@@ -2333,8 +2351,8 @@ function registerTools(ctx, service) {
           name: 'create_alert_record',
           description: 'Create one alert record from an existing template. '
             + 'Values are keyed by template field key: number fields take JSON numbers and text fields take strings. '
-            + 'Omit image, video, and audio fields because media files must be uploaded from the page. '
-            + 'Use list_alert_templates first to read the field keys.',
+            + 'Omit image, video, and audio fields unless the files were uploaded with upload_alert_file and '
+            + 'will be passed as an array of file ids. Use list_alert_templates first to read the field keys.',
           parameters: {
             nodeId: { type: 'string', required: true, description: 'Directory id that owns the record.' },
             templateId: { type: 'string', required: true, description: 'Template id the record follows.' },

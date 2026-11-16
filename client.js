@@ -10,6 +10,7 @@ window.__ModuleLoader__.load({
     const API = 'api/record'
     const DATABASE_BUNDLE = 'dsh-database-config'
     const MAX_FIELDS = 40
+    const PAGE_SIZES = [20, 50, 100]
     const FIELD_TYPES = ['number', 'text', 'image', 'video', 'audio']
     const MEDIA_TYPES = ['image', 'video', 'audio']
     const SEVERITIES = ['', 'low', 'medium', 'high', 'critical']
@@ -91,6 +92,13 @@ window.__ModuleLoader__.load({
         'records.searchPlaceholder': 'Search title, note, or values',
         'records.templateFilter': 'Template',
         'records.allTemplates': 'All templates',
+        'pager.label': 'Record pages',
+        'pager.prev': 'Previous',
+        'pager.next': 'Next',
+        'pager.page': 'Page {page} of {pages}',
+        'pager.total': '{total} records',
+        'pager.pageSize': 'Per page',
+        'pager.sizeOption': '{count}',
         'records.emptyTitle': 'No records in this library',
         'records.emptyBody': 'Add the first alert record, or adjust the filters.',
         'records.emptyFilteredTitle': 'No matching records',
@@ -239,6 +247,13 @@ window.__ModuleLoader__.load({
         'records.searchPlaceholder': '搜索标题、备注或字段值',
         'records.templateFilter': '模板',
         'records.allTemplates': '全部模板',
+        'pager.label': '记录分页',
+        'pager.prev': '上一页',
+        'pager.next': '下一页',
+        'pager.page': '第 {page} / {pages} 页',
+        'pager.total': '共 {total} 条',
+        'pager.pageSize': '每页',
+        'pager.sizeOption': '{count} 条',
         'records.emptyTitle': '这个库还没有记录',
         'records.emptyBody': '新增第一条预警记录，或调整筛选条件。',
         'records.emptyFilteredTitle': '没有匹配的记录',
@@ -521,6 +536,14 @@ window.__ModuleLoader__.load({
   border: 0.5px solid var(--dsw-alias-border-l1); border-radius: 14px;
   background: var(--dsw-alias-bg-layer-1); overflow: hidden;
 }
+.dsh-record-pager {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 12px 2px 0; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
+}
+.dsh-record-pager-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dsh-record-pager-info { font-variant-numeric: tabular-nums; }
+.dsh-record-pager-size { display: flex; align-items: center; gap: 6px; }
+.dsh-record-pager-size .dsh-record-select-wrap { width: 96px; }
 .dsh-record-table-wrap { overflow-x: auto; }
 .dsh-record-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .dsh-record-table th {
@@ -1898,6 +1921,8 @@ window.__ModuleLoader__.load({
       const [recordsTotal, setRecordsTotal] = useState(0)
       const [recordsStatus, setRecordsStatus] = useState('idle')
       const [recordsError, setRecordsError] = useState(null)
+      const [recordsPage, setRecordsPage] = useState(1)
+      const [recordsPageSize, setRecordsPageSize] = useState(20)
       const [templateFilter, setTemplateFilter] = useState('')
       const [queryDraft, setQueryDraft] = useState('')
       const [query, setQuery] = useState('')
@@ -2006,14 +2031,19 @@ window.__ModuleLoader__.load({
         const params = [`nodeId=${encodeURIComponent(nodeId)}`]
         if (templateFilter !== '') params.push(`templateId=${encodeURIComponent(templateFilter)}`)
         if (query.trim() !== '') params.push(`query=${encodeURIComponent(query.trim())}`)
-        params.push('limit=100')
+        params.push(`limit=${String(recordsPageSize)}`)
+        params.push(`offset=${String((recordsPage - 1) * recordsPageSize)}`)
         try {
           const data = await requestJson('GET', `records?${params.join('&')}`)
           if (!aliveRef.current || generation !== recordGeneration.current) return
           const nextRecords = Array.isArray(data.records) ? data.records : []
+          const total = typeof data.total === 'number' ? data.total : nextRecords.length
           setRecords(nextRecords)
-          setRecordsTotal(typeof data.total === 'number' ? data.total : nextRecords.length)
+          setRecordsTotal(total)
           setRecordsStatus('ready')
+          if (nextRecords.length === 0 && total > 0 && recordsPage > 1) {
+            setRecordsPage(Math.max(1, Math.ceil(total / recordsPageSize)))
+          }
         } catch (reason) {
           if (!aliveRef.current || generation !== recordGeneration.current) return
           setRecordsStatus('error')
@@ -2024,6 +2054,7 @@ window.__ModuleLoader__.load({
       const selectNode = (nodeId) => {
         if (nodeId === selectedId) return
         setSelectedId(nodeId)
+        setRecordsPage(1)
         setTemplateFilter('')
         setQuery('')
         setQueryDraft('')
@@ -2157,10 +2188,10 @@ window.__ModuleLoader__.load({
       }
       useEffect(() => { void loadTree() }, [refreshToken])
       useEffect(() => { void loadTemplates(selectedId) }, [selectedId, refreshToken])
-      useEffect(() => { void loadRecords(selectedId) }, [selectedId, templateFilter, query, refreshToken])
+      useEffect(() => { void loadRecords(selectedId) }, [selectedId, templateFilter, query, refreshToken, recordsPage, recordsPageSize])
       useEffect(() => {
         if (queryDraft === query) return undefined
-        const timer = window.setTimeout(() => setQuery(queryDraft), 300)
+        const timer = window.setTimeout(() => { setRecordsPage(1); setQuery(queryDraft) }, 300)
         return () => window.clearTimeout(timer)
       }, [queryDraft, query])
       const treePane = h('aside', { className: 'dsh-record-sidebar' },
@@ -2216,7 +2247,7 @@ window.__ModuleLoader__.load({
             value: templateFilter,
             ariaLabel: t('records.templateFilter'),
             options: [{ value: '', label: t('records.allTemplates') }, ...templates.map(template => ({ value: template.id, label: template.name }))],
-            onChange: setTemplateFilter,
+            onChange: (next) => { setRecordsPage(1); setTemplateFilter(next) },
           })),
         h('label', { className: 'dsh-record-inline-field dsh-record-search' },
           h('span', null, t('records.search')),
@@ -2378,6 +2409,42 @@ window.__ModuleLoader__.load({
                 ? h('span', { className: 'dsh-record-chip-required', 'aria-label': t('template.dialog.required') }, '*')
                 : null))))
           }))
+      const recordsPageCount = Math.max(1, Math.ceil(recordsTotal / recordsPageSize))
+      const recordsPager = recordsTotal === 0 ? null : h('div', {
+        className: 'dsh-record-pager',
+        role: 'group',
+        'aria-label': t('pager.label'),
+      },
+      h('span', { className: 'dsh-record-pager-info' },
+        t('pager.total', { total: String(recordsTotal) }),
+        ' · ',
+        t('pager.page', { page: String(recordsPage), pages: String(recordsPageCount) })),
+      h('div', { className: 'dsh-record-pager-actions' },
+        h('button', {
+          type: 'button',
+          className: 'dsh-record-small-button',
+          disabled: recordsPage <= 1 || recordsStatus === 'loading',
+          'aria-label': t('pager.prev'),
+          onClick: () => setRecordsPage(page => Math.max(1, page - 1)),
+        }, t('pager.prev')),
+        h('button', {
+          type: 'button',
+          className: 'dsh-record-small-button',
+          disabled: recordsPage >= recordsPageCount || recordsStatus === 'loading',
+          'aria-label': t('pager.next'),
+          onClick: () => setRecordsPage(page => Math.min(recordsPageCount, page + 1)),
+        }, t('pager.next')),
+        h('label', { className: 'dsh-record-pager-size' },
+          h('span', null, t('pager.pageSize')),
+          h(Select, {
+            value: String(recordsPageSize),
+            ariaLabel: t('pager.pageSize'),
+            options: PAGE_SIZES.map(size => ({ value: String(size), label: t('pager.sizeOption', { count: String(size) }) })),
+            onChange: (next) => {
+              setRecordsPageSize(Number(next))
+              setRecordsPage(1)
+            },
+          }))))
       const content = selectedNode === null
         ? h('section', { className: 'dsh-record-empty' },
           h('h2', null, nodes.length === 0 ? t('tree.empty') : t('tree.selectHint')),
@@ -2399,9 +2466,8 @@ window.__ModuleLoader__.load({
           tab === 'records'
             ? h(React.Fragment, null,
               recordsToolbar,
-              h('div', { className: 'dsh-record-muted', style: { marginBottom: '8px' } },
-                t('records.count', { shown: String(records.length), total: String(recordsTotal) })),
-              recordsBody)
+              recordsBody,
+              recordsPager)
             : h(React.Fragment, null, templatesToolbar, templatesBody))
       const mainPane = h('main', { className: 'dsh-record-main' },
         h('header', { className: 'dsh-record-main-head' },

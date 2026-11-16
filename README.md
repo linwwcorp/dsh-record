@@ -12,7 +12,7 @@
   - `字符`：文本；
   - `图片` / `视频` / `音频`：记录时上传媒体文件。
 - **预警记录**：选择模板填写标题、发生时间、等级（低 / 中 / 高 / 严重）、备注和字段值；图片可直接预览，视频和音频可在页面播放，所有媒体都能下载。
-- **检索**：按模板筛选、按关键字搜索记录；记录按发生时间倒序排列。
+- **检索与分页**：按模板筛选、按关键字搜索记录；记录按发生时间倒序排列，列表支持页码翻页和每页 20 / 50 / 100 条切换，接口与 Agent 工具同样支持 `limit` / `offset` 分页并返回总数。
 - **存储自动降级**：
   - 检测到数据库插件（`dsh-database-config`）→ 目录、模板、记录、文件索引写入 **PostgreSQL**，媒体文件写入 **MinIO**；
   - 没有数据库插件 → 上述数据写入 `$DSH_HOME/dsh-record/data.json`，媒体文件写入 `$DSH_HOME/dsh-record/media/`。
@@ -63,6 +63,7 @@ dsh plugin install /root/CODE/dsh-record
 - 媒体文件不暴露公开 URL，一律由插件的认证路由读取；视频和音频支持 HTTP Range（拖动进度条）。
 - 数据库插件存在但 PostgreSQL 不可用时，接口返回 `database-unavailable`，页面提示检查数据库插件，不会悄悄改成写本地文件，避免两份数据。
 - HTTP 路由前缀 `api/record`：`tree`、`nodes`、`templates`、`records`、`upload`、`file/content`、`file/download`。
+- `GET api/record/records` 支持 `limit`（默认 100，最大 500）和 `offset`，响应里的 `total` 是过滤后的总条数，页面用这两个参数做分页。
 
 ## 对外开放能力
 
@@ -116,7 +117,7 @@ TypeScript 插件可以用 `import type {} from 'dsh-record'` 获得 `ctx.alertR
 | --- | --- |
 | 目录 | `list_alert_directories`、`create_alert_directory`、`update_alert_directory`、`delete_alert_directory` |
 | 模板 | `list_alert_templates`、`create_alert_template`、`update_alert_template`、`delete_alert_template` |
-| 记录 | `list_alert_records`、`get_alert_record`、`create_alert_record`、`update_alert_record`、`delete_alert_record` |
+| 记录 | `list_alert_records`（支持 `limit` / `offset` 分页，返回 `total`、`offset`、`hasMore`）、`get_alert_record`、`create_alert_record`、`update_alert_record`、`delete_alert_record` |
 | 媒体 | `upload_alert_file`（base64 上传，返回文件 id 后可写入记录的媒体字段） |
 
 典型调用顺序：`list_alert_directories` → `list_alert_templates`（拿到字段 `key`）→ `create_alert_record`（`values` 按字段 key 传数字/字符）→ 需要附件时 `upload_alert_file` → `update_alert_record` 把文件 id 放进媒体字段的数组。
@@ -156,7 +157,7 @@ A DeepSeek Harness plugin for **alert records**. Multi-level directories (each o
   - `text`;
   - `image`, `video`, and `audio` fields that take uploaded media.
 - **Alert records**: pick a template and fill in a title, occurrence time, severity (low / medium / high / critical), a note, and the field values. Images preview inline; video and audio play in the page; every file can be downloaded.
-- **Search and filter**: filter records by template and search by keyword; newest occurrence first.
+- **Search and paging**: filter records by template and search by keyword; newest occurrence first. The list pages through records with a page-size switch (20 / 50 / 100 per page), and both the HTTP API and the agent tools accept `limit` / `offset` pagination and return the full match count.
 - **Automatic storage fallback**:
   - With the database plugin (`dsh-database-config`): directories, templates, records, and the file index go to **PostgreSQL**; media files go to **MinIO**.
   - Without it: the same data goes to `$DSH_HOME/dsh-record/data.json` and media files to `$DSH_HOME/dsh-record/media/`.
@@ -197,6 +198,7 @@ Header badges show `PostgreSQL` / `Local files` and `MinIO` / `Local disk`.
 - Media files are never exposed as public URLs; the plugin's authenticated routes stream them, and HTTP Range requests let video and audio seek.
 - When the database plugin is installed but PostgreSQL is down, the routes fail with `database-unavailable` and the page explains the problem; the plugin does not silently write local files, which would split the data.
 - HTTP routes under `api/record`: `tree`, `nodes`, `templates`, `records`, `upload`, `file/content`, `file/download`.
+- `GET api/record/records` accepts `limit` (default 100, maximum 500) and `offset`; the `total` field is the filtered match count, and the page uses both for pagination.
 
 ## Callable capabilities
 
@@ -250,7 +252,7 @@ The plugin registers 14 tools covering directory, template, and record CRUD plus
 | --- | --- |
 | Directories | `list_alert_directories`, `create_alert_directory`, `update_alert_directory`, `delete_alert_directory` |
 | Templates | `list_alert_templates`, `create_alert_template`, `update_alert_template`, `delete_alert_template` |
-| Records | `list_alert_records`, `get_alert_record`, `create_alert_record`, `update_alert_record`, `delete_alert_record` |
+| Records | `list_alert_records` (accepts `limit` / `offset` pagination and returns `total`, `offset`, `hasMore`), `get_alert_record`, `create_alert_record`, `update_alert_record`, `delete_alert_record` |
 | Media | `upload_alert_file` (base64 upload; returns the file id to put in a media field) |
 
 Typical order: `list_alert_directories` → `list_alert_templates` (read the field `key`s) → `create_alert_record` (pass numbers and strings in `values`) → `upload_alert_file` for attachments → `update_alert_record` with the file id in the media field array.
