@@ -9,7 +9,7 @@
 - **多级目录**：左侧目录树可任意建子库（厂区 → 车间 → 设备），支持重命名、删除；删除目录会连带删除子目录、模板、记录和媒体文件。
 - **可调分栏**：左侧目录栏和右侧内容之间可拖动分隔条调整宽度（键盘方向键也可微调，双击恢复默认），宽度会记住。
 - **预警模板**：每个库可以建多个模板，模板由若干字段组成：
-  - `数字`：带单位（如 `℃`、`MPa`），记录时填数值；
+  - `数字`：记录时填数值；
   - `字符`：文本；
   - `图片` / `视频` / `音频`：记录时上传媒体文件。
 - **预警记录**：选择模板填写标题、发生时间、等级（低 / 中 / 高 / 严重）、备注和字段值；图片可直接预览，视频和音频可在页面播放，所有媒体都能下载。
@@ -50,7 +50,7 @@ dsh plugin install /root/CODE/dsh-record
 左侧是库目录树，右侧是选中的库：
 
 - **记录**：按模板筛选、搜索、新建 / 编辑 / 查看 / 删除记录；
-- **模板**：新建 / 编辑模板，字段编辑器里可以增删字段、选择字段类型、填单位和是否必填。
+- **模板**：新建 / 编辑模板，字段编辑器里可以增删字段、选择字段类型和是否必填。
 
 页头徽标显示当前存储：`PostgreSQL` / `本地文件`，以及 `MinIO` / `本地目录`。
 
@@ -155,7 +155,7 @@ A DeepSeek Harness plugin for **alert records**. Multi-level directories (each o
 - **Multi-level directories**: build sub-libraries of any depth (site → workshop → device), rename and delete them. Deleting a directory also removes its sub-directories, templates, records, and media files.
 - **Resizable split**: drag the separator between the directory column and the content to change the width (arrow keys also work when it has focus, and a double-click restores the default). The width is remembered.
 - **Alert templates**: each library holds any number of templates made of fields:
-  - `number` with an optional unit (such as `°C` or `MPa`);
+  - `number`;
   - `text`;
   - `image`, `video`, and `audio` fields that take uploaded media.
 - **Alert records**: pick a template and fill in a title, occurrence time, severity (low / medium / high / critical), a note, and the field values. Images preview inline; video and audio play in the page; every file can be downloaded.
@@ -186,7 +186,7 @@ After enabling it, the sidebar shows an Alert records entry.
 The left column is the library tree; the right column shows the selected library:
 
 - **Records**: filter by template, search, create / edit / view / delete records.
-- **Templates**: create and edit templates. The field editor adds and removes fields, picks each type, and sets a unit and requiredness.
+- **Templates**: create and edit templates. The field editor adds and removes fields and picks each type and requiredness.
 
 Header badges show `PostgreSQL` / `Local files` and `MinIO` / `Local disk`.
 

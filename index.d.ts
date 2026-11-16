@@ -28,7 +28,6 @@ export interface AlertField {
   key: string
   label: string
   type: 'number' | 'text' | 'image' | 'video' | 'audio'
-  unit: string
   required: boolean
 }
 

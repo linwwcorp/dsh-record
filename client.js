@@ -77,15 +77,10 @@ window.__ModuleLoader__.load({
         'template.dialog.createTitle': 'New template',
         'template.dialog.editTitle': 'Edit template',
         'template.dialog.name': 'Template name',
-        'template.dialog.namePlaceholder': 'Temperature alert',
         'template.dialog.description': 'Description',
-        'template.dialog.descriptionPlaceholder': 'What this template captures',
         'template.dialog.fields': 'Fields',
         'template.dialog.fieldLabel': 'Field label',
-        'template.dialog.fieldLabelPlaceholder': 'Temperature',
         'template.dialog.fieldType': 'Type',
-        'template.dialog.fieldUnit': 'Unit',
-        'template.dialog.fieldUnitPlaceholder': '°C',
         'template.dialog.required': 'Required',
         'template.dialog.emptyField': 'Add at least one field.',
         'template.dialog.nameRequired': 'Enter a template name.',
@@ -234,15 +229,10 @@ window.__ModuleLoader__.load({
         'template.dialog.createTitle': '新建模板',
         'template.dialog.editTitle': '编辑模板',
         'template.dialog.name': '模板名称',
-        'template.dialog.namePlaceholder': '温度预警',
         'template.dialog.description': '说明',
-        'template.dialog.descriptionPlaceholder': '这个模板记录什么内容',
         'template.dialog.fields': '字段',
         'template.dialog.fieldLabel': '字段名称',
-        'template.dialog.fieldLabelPlaceholder': '温度',
         'template.dialog.fieldType': '类型',
-        'template.dialog.fieldUnit': '单位',
-        'template.dialog.fieldUnitPlaceholder': '℃',
         'template.dialog.required': '必填',
         'template.dialog.emptyField': '至少添加一个字段。',
         'template.dialog.nameRequired': '请填写模板名称。',
@@ -703,7 +693,7 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-primary-foreground);
 }
 .dsh-record-field-row {
-  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto auto;
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto;
   align-items: end; gap: 8px;
   padding: 9px; border: 0.5px solid var(--dsw-alias-border-l1); border-radius: 10px;
   background: var(--dsw-alias-bg-base);
@@ -982,8 +972,7 @@ window.__ModuleLoader__.load({
         if (MEDIA_TYPES.includes(field.type)) continue
         const value = values[field.key]
         if (value === undefined || value === null || String(value).trim() === '') continue
-        const unit = field.unit === undefined || field.unit === '' ? '' : ` ${String(field.unit)}`
-        items.push(`${String(field.label)}: ${String(value)}${unit}`)
+        items.push(`${String(field.label)}: ${String(value)}`)
         if (items.length >= 3) break
       }
       return items
@@ -1364,13 +1353,12 @@ window.__ModuleLoader__.load({
         template === null || template === undefined || typeof template.description !== 'string' ? '' : template.description)
       const [rows, setRows] = useState(() => {
         const fields = template !== null && template !== undefined && Array.isArray(template.fields) ? template.fields : []
-        if (fields.length === 0) return [{ clientId: newLocalId(), key: null, label: '', type: 'number', unit: '', required: false }]
+        if (fields.length === 0) return [{ clientId: newLocalId(), key: null, label: '', type: 'number', required: false }]
         return fields.map(field => ({
           clientId: newLocalId(),
           key: typeof field.key === 'string' ? field.key : null,
           label: field.label,
           type: field.type,
-          unit: typeof field.unit === 'string' ? field.unit : '',
           required: field.required === true,
         }))
       })
@@ -1384,7 +1372,7 @@ window.__ModuleLoader__.load({
       const addRow = () => {
         setRows(current => {
           if (current.length >= MAX_FIELDS) return current
-          return [...current, { clientId: newLocalId(), key: null, label: '', type: 'number', unit: '', required: false }]
+          return [...current, { clientId: newLocalId(), key: null, label: '', type: 'number', required: false }]
         })
         setError(null)
       }
@@ -1408,7 +1396,7 @@ window.__ModuleLoader__.load({
           return
         }
         const fields = rows.map((row) => {
-          const field = { label: row.label.trim(), type: row.type, unit: row.unit.trim(), required: row.required === true }
+          const field = { label: row.label.trim(), type: row.type, required: row.required === true }
           if (row.key !== null && row.key !== undefined) field.key = row.key
           return field
         })
@@ -1475,7 +1463,6 @@ window.__ModuleLoader__.load({
               className: 'dsh-record-input',
               value: name,
               maxLength: 120,
-              placeholder: t('template.dialog.namePlaceholder'),
               onChange: (event) => { setName(event.target.value); setError(null) },
             })),
           h(Field, { key: 'description', label: t('template.dialog.description'), htmlFor: 'dsh-record-template-description' },
@@ -1484,7 +1471,6 @@ window.__ModuleLoader__.load({
               className: 'dsh-record-textarea',
               value: description,
               maxLength: 4000,
-              placeholder: t('template.dialog.descriptionPlaceholder'),
               onChange: (event) => { setDescription(event.target.value); setError(null) },
             })),
           h('p', { key: 'fields-title', className: 'dsh-record-section-title' },
@@ -1496,7 +1482,6 @@ window.__ModuleLoader__.load({
                 className: 'dsh-record-input',
                 value: row.label,
                 maxLength: 60,
-                placeholder: t('template.dialog.fieldLabelPlaceholder'),
                 onChange: (event) => setRow(row.clientId, { label: event.target.value }),
               })),
             h(Field, { label: t('template.dialog.fieldType'), htmlFor: `dsh-record-field-type-${row.clientId}` },
@@ -1506,15 +1491,6 @@ window.__ModuleLoader__.load({
                 ariaLabel: t('template.dialog.fieldType'),
                 options: FIELD_TYPES.map(type => ({ value: type, label: fieldTypeLabel(t, type) })),
                 onChange: (next) => setRow(row.clientId, { type: next }),
-              })),
-            h(Field, { label: t('template.dialog.fieldUnit'), htmlFor: `dsh-record-field-unit-${row.clientId}` },
-              h('input', {
-                id: `dsh-record-field-unit-${row.clientId}`,
-                className: 'dsh-record-input',
-                value: row.unit,
-                maxLength: 20,
-                placeholder: t('template.dialog.fieldUnitPlaceholder'),
-                onChange: (event) => setRow(row.clientId, { unit: event.target.value }),
               })),
             h('label', { className: 'dsh-record-checkbox' },
               h('input', {
@@ -1544,7 +1520,7 @@ window.__ModuleLoader__.load({
     }
 
     function MediaEditor({ t, field, items, disabled, uploading, onPick, onRemove }) {
-      const label = `${String(field.label)}${field.unit === undefined || field.unit === '' ? '' : ` (${String(field.unit)})`}`
+      const label = String(field.label)
       return h('div', { className: 'dsh-record-dynamic-item' },
         h('div', { className: 'dsh-record-field-label' }, label),
         items.length === 0 ? null : h('div', { className: 'dsh-record-uploads' },
@@ -1798,7 +1774,7 @@ window.__ModuleLoader__.load({
             : h('div', { key: 'values', className: 'dsh-record-dynamic' },
               fields.map((field) => {
                 const raw = values[field.key]
-                const label = `${String(field.label)}${field.unit === undefined || field.unit === '' ? '' : ` (${String(field.unit)})`}`
+                const label = String(field.label)
                 if (field.type === 'number') {
                   return h('div', { key: field.key, className: 'dsh-record-dynamic-item' },
                     h(Field, { label, htmlFor: `dsh-record-value-${field.key}` },
@@ -1848,7 +1824,7 @@ window.__ModuleLoader__.load({
         ? template.fields : []
       const fields = templateFields.length > 0
         ? templateFields
-        : Object.keys(values).map(key => ({ key, label: key, type: 'text', unit: '', required: false }))
+        : Object.keys(values).map(key => ({ key, label: key, type: 'text', required: false }))
       const renderMedia = (file) => {
         if (file.kind === 'image') {
           return h('img', {
@@ -1899,8 +1875,7 @@ window.__ModuleLoader__.load({
         if (value === undefined || value === null || String(value).trim() === '') {
           return h('p', { className: 'dsh-record-muted' }, t('record.detail.emptyValue'))
         }
-        const unit = field.unit === undefined || field.unit === '' ? '' : ` ${String(field.unit)}`
-        return h('p', { className: 'dsh-record-detail-value' }, `${String(value)}${unit}`)
+        return h('p', { className: 'dsh-record-detail-value' }, String(value))
       }
       return h(Dialog, {
         t,
@@ -2506,7 +2481,6 @@ window.__ModuleLoader__.load({
               },
               h('span', { className: 'dsh-record-chip-label' }, field.label),
               h('span', { className: 'dsh-record-chip-type' }, fieldTypeLabel(t, field.type)),
-              field.unit === undefined || field.unit === '' ? null : h('span', null, field.unit),
               field.required === true
                 ? h('span', { className: 'dsh-record-chip-required', 'aria-label': t('template.dialog.required') }, '*')
                 : null))))

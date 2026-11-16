@@ -39,7 +39,6 @@ const MAX_DIRECTORY_NAME = 120
 const MAX_TEMPLATE_NAME = 120
 const MAX_DESCRIPTION = 4000
 const MAX_FIELD_LABEL = 60
-const MAX_FIELD_UNIT = 20
 const MAX_FIELDS = 40
 const MAX_TITLE = 160
 const MAX_NOTE = 4000
@@ -217,13 +216,12 @@ function jsonColumn(value, fallback) {
 /** @returns one stored field with defaults applied. */
 function normalizeStoredField(value) {
   if (!isRecord(value)) {
-    return { key: '', label: '', type: 'text', unit: '', required: false }
+    return { key: '', label: '', type: 'text', required: false }
   }
   return {
     key: typeof value.key === 'string' ? value.key : '',
     label: typeof value.label === 'string' ? value.label : '',
     type: FIELD_TYPES.includes(value.type) ? value.type : 'text',
-    unit: typeof value.unit === 'string' ? value.unit : '',
     required: value.required === true,
   }
 }
@@ -365,7 +363,6 @@ function normalizeFields(value, existing) {
     if (!FIELD_TYPES.includes(type)) {
       throw new AlertError('invalid-input', `Field type must be one of ${FIELD_TYPES.join(', ')}`, 400)
     }
-    const unit = optionalText(item.unit, 'Field unit', MAX_FIELD_UNIT)
     if (item.required !== undefined && typeof item.required !== 'boolean') {
       throw new AlertError('invalid-input', 'Field required must be a boolean', 400)
     }
@@ -373,7 +370,7 @@ function normalizeFields(value, existing) {
     const key = providedKey !== '' && previous.has(providedKey) ? providedKey : newFieldKey()
     if (seen.has(key)) throw new AlertError('invalid-input', 'Field keys must be unique', 400)
     seen.add(key)
-    fields.push({ key, label, type, unit, required: item.required === true })
+    fields.push({ key, label, type, required: item.required === true })
   }
   return fields
 }
@@ -1094,7 +1091,6 @@ function projectTemplate(template, recordCount) {
       key: field.key,
       label: field.label,
       type: field.type,
-      unit: field.unit,
       required: field.required,
     })),
     recordCount,
@@ -1946,7 +1942,6 @@ const FIELD_PROPERTIES = {
   key: { type: 'string', required: true },
   label: { type: 'string', required: true },
   type: { type: 'string', required: true, enum: FIELD_TYPES },
-  unit: { type: 'string', required: true },
   required: { type: 'boolean', required: true },
 }
 
@@ -2001,7 +1996,6 @@ function toolTemplate(template) {
       key: field.key,
       label: field.label,
       type: field.type,
-      unit: field.unit,
       required: field.required,
     })),
   }
@@ -2184,7 +2178,7 @@ function registerTools(ctx, service) {
                 ? 'No alert templates were found.'
                 : `Alert templates (${String(value.total)}):\n`
                   + value.templates.map(template => `- id=${template.id} directory=${template.nodeId} name=${JSON.stringify(template.name)} records=${String(template.recordCount)} fields=`
-                    + template.fields.map(field => `${field.key}:${field.type}:${field.label}${field.unit === '' ? '' : `(${field.unit})`}`).join(', ')).join('\n'),
+                    + template.fields.map(field => `${field.key}:${field.type}:${field.label}`).join(', ')).join('\n'),
             }],
           },
           presentCall: args => ({
@@ -2230,10 +2224,6 @@ function registerTools(ctx, service) {
                     required: true,
                     enum: FIELD_TYPES,
                     description: 'Value type: number, text, image, video, or audio.',
-                  },
-                  unit: {
-                    type: 'string',
-                    description: 'Unit shown after a number value, at most 20 characters.',
                   },
                   required: {
                     type: 'boolean',
@@ -2624,7 +2614,6 @@ function registerTools(ctx, service) {
                   key: { type: 'string', description: 'Existing field key to keep; omit to assign a new one.' },
                   label: { type: 'string', required: true, description: 'Field label.' },
                   type: { type: 'string', required: true, enum: FIELD_TYPES, description: 'Field type.' },
-                  unit: { type: 'string', description: 'Unit after a number value.' },
                   required: { type: 'boolean', description: 'Whether a record must provide this field.' },
                 },
               },
