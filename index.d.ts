@@ -27,7 +27,7 @@ export interface AlertField {
   /** Stable key record values are stored under. */
   key: string
   label: string
-  type: 'number' | 'text' | 'image' | 'video' | 'audio'
+  type: 'number' | 'text' | 'boolean' | 'image' | 'video' | 'audio'
   required: boolean
 }
 

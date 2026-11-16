@@ -15,7 +15,7 @@ window.__ModuleLoader__.load({
     const DEFAULT_SIDEBAR_WIDTH = 272
     const MIN_SIDEBAR_WIDTH = 200
     const MAX_SIDEBAR_WIDTH = 720
-    const FIELD_TYPES = ['number', 'text', 'image', 'video', 'audio']
+    const FIELD_TYPES = ['number', 'text', 'boolean', 'image', 'video', 'audio']
     const MEDIA_TYPES = ['image', 'video', 'audio']
     const SEVERITIES = ['', 'low', 'medium', 'high', 'critical']
 
@@ -63,9 +63,12 @@ window.__ModuleLoader__.load({
         'action.openDatabase': 'Open database plugin',
         'field.type.number': 'Number',
         'field.type.text': 'Text',
+        'field.type.boolean': 'Boolean',
         'field.type.image': 'Image',
         'field.type.video': 'Video',
         'field.type.audio': 'Audio',
+        'value.yes': 'Yes',
+        'value.no': 'No',
         'templates.loading': 'Loading templates…',
         'templates.emptyTitle': 'No templates in this library',
         'templates.emptyBody': 'Create a template to describe the fields every alert record needs.',
@@ -215,9 +218,12 @@ window.__ModuleLoader__.load({
         'action.openDatabase': '打开数据库插件',
         'field.type.number': '数字',
         'field.type.text': '文本',
+        'field.type.boolean': '布尔',
         'field.type.image': '图片',
         'field.type.video': '视频',
         'field.type.audio': '音频',
+        'value.yes': '是',
+        'value.no': '否',
         'templates.loading': '正在读取模板…',
         'templates.emptyTitle': '这个库还没有模板',
         'templates.emptyBody': '先创建模板，定义每条预警记录需要填写的字段。',
@@ -871,6 +877,7 @@ window.__ModuleLoader__.load({
     function fieldTypeLabel(t, type) {
       if (type === 'number') return t('field.type.number')
       if (type === 'text') return t('field.type.text')
+      if (type === 'boolean') return t('field.type.boolean')
       if (type === 'image') return t('field.type.image')
       if (type === 'video') return t('field.type.video')
       if (type === 'audio') return t('field.type.audio')
@@ -953,6 +960,7 @@ window.__ModuleLoader__.load({
         const value = source[field.key]
         if (field.type === 'number') values[field.key] = value === undefined || value === null ? '' : String(value)
         else if (field.type === 'text') values[field.key] = typeof value === 'string' ? value : ''
+        else if (field.type === 'boolean') values[field.key] = value === true ? 'true' : 'false'
         else if (Array.isArray(value)) {
           values[field.key] = value.map((id) => {
             const file = files.find(item => item.id === id)
@@ -964,7 +972,7 @@ window.__ModuleLoader__.load({
       return values
     }
 
-    function recordSummary(record, template) {
+    function recordSummary(t, record, template) {
       const items = []
       const fields = template !== null && template !== undefined && Array.isArray(template.fields) ? template.fields : []
       const values = record.values !== null && typeof record.values === 'object' ? record.values : {}
@@ -972,7 +980,8 @@ window.__ModuleLoader__.load({
         if (MEDIA_TYPES.includes(field.type)) continue
         const value = values[field.key]
         if (value === undefined || value === null || String(value).trim() === '') continue
-        items.push(`${String(field.label)}: ${String(value)}`)
+        const text = field.type === 'boolean' ? t(value === true ? 'value.yes' : 'value.no') : String(value)
+        items.push(`${String(field.label)}: ${text}`)
         if (items.length >= 3) break
       }
       return items
@@ -1654,6 +1663,8 @@ window.__ModuleLoader__.load({
               return
             }
             nextValues[field.key] = text
+          } else if (field.type === 'boolean') {
+            nextValues[field.key] = raw === 'true'
           } else {
             const ids = Array.isArray(raw) ? raw.map(file => file.id) : []
             if (ids.length === 0 && field.required === true) {
@@ -1800,6 +1811,21 @@ window.__ModuleLoader__.load({
                         onChange: (event) => setFieldValue(field.key, event.target.value),
                       })))
                 }
+                if (field.type === 'boolean') {
+                  return h('div', { key: field.key, className: 'dsh-record-dynamic-item' },
+                    h(Field, { label, htmlFor: `dsh-record-value-${field.key}` },
+                      h(Select, {
+                        id: `dsh-record-value-${field.key}`,
+                        value: raw === 'true' ? 'true' : 'false',
+                        ariaLabel: label,
+                        disabled: busy,
+                        options: [
+                          { value: 'true', label: t('value.yes') },
+                          { value: 'false', label: t('value.no') },
+                        ],
+                        onChange: (next) => setFieldValue(field.key, next),
+                      })))
+                }
                 return h(MediaEditor, {
                   key: field.key,
                   t,
@@ -1874,6 +1900,9 @@ window.__ModuleLoader__.load({
         }
         if (value === undefined || value === null || String(value).trim() === '') {
           return h('p', { className: 'dsh-record-muted' }, t('record.detail.emptyValue'))
+        }
+        if (field.type === 'boolean') {
+          return h('p', { className: 'dsh-record-detail-value' }, t(value === true ? 'value.yes' : 'value.no'))
         }
         return h('p', { className: 'dsh-record-detail-value' }, String(value))
       }
@@ -2380,7 +2409,7 @@ window.__ModuleLoader__.load({
                     h('th', { className: 'dsh-record-col-actions' }, t('records.columnActions')))),
                 h('tbody', null, records.map((record) => {
                   const template = templateMap.get(record.templateId) ?? null
-                  const summary = recordSummary(record, template)
+                  const summary = recordSummary(t, record, template)
                   const fileCount = Array.isArray(record.files) ? record.files.length : 0
                   return h('tr', { key: record.id },
                     h('td', null, h('span', { className: 'dsh-record-row-title', title: record.title }, record.title)),

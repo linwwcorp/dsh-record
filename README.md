@@ -2,7 +2,7 @@
 
 中文 | [English](#english)
 
-一个 DeepSeek Harness 插件：**预警记录**。用多级目录（每个目录相当于一个库）组织预警模板和预警记录；模板字段支持数字、字符、图片、视频、音频；装了数据库插件就用 PostgreSQL + MinIO，没装就落本地文件和本地目录。
+一个 DeepSeek Harness 插件：**预警记录**。用多级目录（每个目录相当于一个库）组织预警模板和预警记录；模板字段支持数字、字符、布尔、图片、视频、音频；装了数据库插件就用 PostgreSQL + MinIO，没装就落本地文件和本地目录。
 
 ## 功能
 
@@ -11,6 +11,7 @@
 - **预警模板**：每个库可以建多个模板，模板由若干字段组成：
   - `数字`：记录时填数值；
   - `字符`：文本；
+  - `布尔`：记录时选是 / 否；
   - `图片` / `视频` / `音频`：记录时上传媒体文件。
 - **预警记录**：选择模板填写标题、发生时间、等级（低 / 中 / 高 / 严重）、备注和字段值；图片可直接预览，视频和音频可在页面播放，所有媒体都能下载。
 - **检索与分页**：按模板筛选、按关键字搜索记录；记录按发生时间倒序排列，列表支持页码翻页和每页 20 / 50 / 100 条切换，接口与 Agent 工具同样支持 `limit` / `offset` 分页并返回总数。
@@ -121,7 +122,7 @@ TypeScript 插件可以用 `import type {} from 'dsh-record'` 获得 `ctx.alertR
 | 记录 | `list_alert_records`（支持 `limit` / `offset` 分页，返回 `total`、`offset`、`hasMore`）、`get_alert_record`、`create_alert_record`、`update_alert_record`、`delete_alert_record` |
 | 媒体 | `upload_alert_file`（base64 上传，返回文件 id 后可写入记录的媒体字段） |
 
-典型调用顺序：`list_alert_directories` → `list_alert_templates`（拿到字段 `key`）→ `create_alert_record`（`values` 按字段 key 传数字/字符）→ 需要附件时 `upload_alert_file` → `update_alert_record` 把文件 id 放进媒体字段的数组。
+典型调用顺序：`list_alert_directories` → `list_alert_templates`（拿到字段 `key`）→ `create_alert_record`（`values` 按字段 key 传数字/字符/布尔）→ 需要附件时 `upload_alert_file` → `update_alert_record` 把文件 id 放进媒体字段的数组。
 
 ## 结构
 
@@ -148,7 +149,7 @@ TypeScript 插件可以用 `import type {} from 'dsh-record'` 获得 `ctx.alertR
 
 [中文](#dsh-record) | English
 
-A DeepSeek Harness plugin for **alert records**. Multi-level directories (each one acts as a library) organize alert templates and alert records. Template fields support numbers, text, images, video, and audio. With the database plugin the data goes to PostgreSQL and MinIO; without it everything stays in local files and directories.
+A DeepSeek Harness plugin for **alert records**. Multi-level directories (each one acts as a library) organize alert templates and alert records. Template fields support numbers, text, booleans, images, video, and audio. With the database plugin the data goes to PostgreSQL and MinIO; without it everything stays in local files and directories.
 
 ## Features
 
@@ -157,6 +158,7 @@ A DeepSeek Harness plugin for **alert records**. Multi-level directories (each o
 - **Alert templates**: each library holds any number of templates made of fields:
   - `number`;
   - `text`;
+  - `boolean`: yes or no;
   - `image`, `video`, and `audio` fields that take uploaded media.
 - **Alert records**: pick a template and fill in a title, occurrence time, severity (low / medium / high / critical), a note, and the field values. Images preview inline; video and audio play in the page; every file can be downloaded.
 - **Search and paging**: filter records by template and search by keyword; newest occurrence first. The list pages through records with a page-size switch (20 / 50 / 100 per page), and both the HTTP API and the agent tools accept `limit` / `offset` pagination and return the full match count.
@@ -257,7 +259,7 @@ The plugin registers 14 tools covering directory, template, and record CRUD plus
 | Records | `list_alert_records` (accepts `limit` / `offset` pagination and returns `total`, `offset`, `hasMore`), `get_alert_record`, `create_alert_record`, `update_alert_record`, `delete_alert_record` |
 | Media | `upload_alert_file` (base64 upload; returns the file id to put in a media field) |
 
-Typical order: `list_alert_directories` → `list_alert_templates` (read the field `key`s) → `create_alert_record` (pass numbers and strings in `values`) → `upload_alert_file` for attachments → `update_alert_record` with the file id in the media field array.
+Typical order: `list_alert_directories` → `list_alert_templates` (read the field `key`s) → `create_alert_record` (pass numbers, strings, and booleans in `values`) → `upload_alert_file` for attachments → `update_alert_record` with the file id in the media field array.
 
 ## Layout
 

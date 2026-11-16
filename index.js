@@ -47,7 +47,7 @@ const MAX_FIELD_KEY = 64
 const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 500
 const DEFAULT_UPLOAD_MB = 200
-const FIELD_TYPES = ['number', 'text', 'image', 'video', 'audio']
+const FIELD_TYPES = ['number', 'text', 'boolean', 'image', 'video', 'audio']
 const MEDIA_KINDS = new Set(['image', 'video', 'audio'])
 const SEVERITIES = ['', 'low', 'medium', 'high', 'critical']
 const NODE_TABLE = 'dsh_alert_nodes'
@@ -398,6 +398,13 @@ function normalizeValues(value, fields) {
       values[key] = raw
       continue
     }
+    if (field.type === 'boolean') {
+      if (typeof raw !== 'boolean') {
+        throw new AlertError('invalid-input', `Field "${field.label}" must be true or false`, 400)
+      }
+      values[key] = raw
+      continue
+    }
     if (!Array.isArray(raw)) {
       throw new AlertError('invalid-input', `Field "${field.label}" must be a list of uploaded files`, 400)
     }
@@ -419,6 +426,10 @@ function assertRequiredFields(fields, values) {
       if (typeof value !== 'string' || value.trim() === '') {
         throw new AlertError('invalid-input', `Field "${field.label}" is required`, 400)
       }
+      continue
+    }
+    if (field.type === 'boolean') {
+      if (value === undefined) throw new AlertError('invalid-input', `Field "${field.label}" is required`, 400)
       continue
     }
     if (!Array.isArray(value) || value.length === 0) {
@@ -2200,7 +2211,7 @@ function registerTools(ctx, service) {
           name: 'create_alert_template',
           description: 'Create one template that describes the fields of alert records in a directory. '
             + 'Fields define the form the page shows; a number field stores numbers, a text field stores strings, '
-            + 'and image, video, and audio fields store uploaded file ids. '
+            + 'a boolean field stores true or false, and image, video, and audio fields store uploaded file ids. '
             + 'Use list_alert_directories first to find the directory id.',
           parameters: {
             nodeId: { type: 'string', required: true, description: 'Directory id that owns the template.' },
@@ -2223,7 +2234,7 @@ function registerTools(ctx, service) {
                     type: 'string',
                     required: true,
                     enum: FIELD_TYPES,
-                    description: 'Value type: number, text, image, video, or audio.',
+                    description: 'Value type: number, text, boolean, image, video, or audio.',
                   },
                   required: {
                     type: 'boolean',
@@ -2340,7 +2351,8 @@ function registerTools(ctx, service) {
         child.tools.register(defineTool({
           name: 'create_alert_record',
           description: 'Create one alert record from an existing template. '
-            + 'Values are keyed by template field key: number fields take JSON numbers and text fields take strings. '
+            + 'Values are keyed by template field key: number fields take JSON numbers, text fields take strings, '
+            + 'and boolean fields take true or false. '
             + 'Omit image, video, and audio fields unless the files were uploaded with upload_alert_file and '
             + 'will be passed as an array of file ids. Use list_alert_templates first to read the field keys.',
           parameters: {
@@ -2360,7 +2372,7 @@ function registerTools(ctx, service) {
             values: {
               type: 'json',
               description: 'Field values keyed by template field key. Number fields take JSON numbers, '
-                + 'text fields take strings, and media fields must be omitted.',
+                + 'text fields take strings, boolean fields take true or false, and media fields must be omitted.',
             },
           },
           output: {
@@ -2500,9 +2512,9 @@ function registerTools(ctx, service) {
         child.tools.register(defineTool({
           name: 'update_alert_record',
           description: 'Update one alert record. Omitted fields keep their value. A supplied `values` object '
-            + 'replaces the whole value map, keyed by template field key; number fields take numbers and text '
-            + 'fields take strings. Media fields take arrays of file ids returned by upload_alert_file. '
-            + 'Use get_alert_record first to read the current values.',
+            + 'replaces the whole value map, keyed by template field key; number fields take numbers, text '
+            + 'fields take strings, and boolean fields take true or false. Media fields take arrays of file ids '
+            + 'returned by upload_alert_file. Use get_alert_record first to read the current values.',
           parameters: {
             id: { type: 'string', required: true, description: 'Alert record id from list_alert_records.' },
             title: { type: 'string', description: 'New title.' },
