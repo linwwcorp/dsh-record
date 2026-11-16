@@ -17,7 +17,7 @@
   - 检测到数据库插件（`dsh-database-config`）→ 目录、模板、记录、文件索引写入 **PostgreSQL**，媒体文件写入 **MinIO**；
   - 没有数据库插件 → 上述数据写入 `$DSH_HOME/dsh-record/data.json`，媒体文件写入 `$DSH_HOME/dsh-record/media/`。
   - 状态徽标会显示当前实际使用的存储方式。
-- **Agent 工具**：`list_alert_directories`、`create_alert_directory`、`list_alert_templates`、`create_alert_template`、`list_alert_records`、`create_alert_record`、`delete_alert_record`。
+- **Agent 工具（14 个）**：目录 `list_alert_directories` / `create_alert_directory` / `update_alert_directory` / `delete_alert_directory`；模板 `list_alert_templates` / `create_alert_template` / `update_alert_template` / `delete_alert_template`；记录 `list_alert_records` / `get_alert_record` / `create_alert_record` / `update_alert_record` / `delete_alert_record`；媒体 `upload_alert_file`。
 
 ## 配置
 
@@ -63,13 +63,70 @@ dsh plugin install /root/CODE/dsh-record
 - 媒体文件不暴露公开 URL，一律由插件的认证路由读取；视频和音频支持 HTTP Range（拖动进度条）。
 - 数据库插件存在但 PostgreSQL 不可用时，接口返回 `database-unavailable`，页面提示检查数据库插件，不会悄悄改成写本地文件，避免两份数据。
 - HTTP 路由前缀 `api/record`：`tree`、`nodes`、`templates`、`records`、`upload`、`file/content`、`file/download`。
-- 其他插件可以注入 `ctx.alertRecords` 复用同一套实现（`tree()`、`createDirectory()`、`createTemplate()`、`createRecord()` 等）。
+
+## 对外开放能力
+
+### 给其他插件（Cordis Service）
+
+插件把全部能力注册为 Cordis Service `alertRecords`，其他 Host 插件和模型工具调用同一套实现：
+
+```js
+export const inject = ['alertRecords']
+
+export async function apply(ctx) {
+  const { nodes } = await ctx.alertRecords.tree()
+  const [template] = await ctx.alertRecords.listTemplates(nodes[0].id)
+  const record = await ctx.alertRecords.createRecord({
+    nodeId: nodes[0].id,
+    templateId: template.id,
+    title: '3 号炉温度超限',
+    severity: 'high',
+    values: { [template.fields[0].key]: 88.6 },
+  })
+  const full = await ctx.alertRecords.getRecord(record.id)
+  const file = await ctx.alertRecords.uploadFile({
+    fieldKey: template.fields[0].key,
+    name: 'photo.png',
+    contentType: 'image/png',
+    bytes: pngBytes,
+  })
+  await ctx.alertRecords.updateRecord(record.id, {
+    values: { ...full.values, [template.fields[2].key]: [file.id] },
+  })
+}
+```
+
+TypeScript 插件可以用 `import type {} from 'dsh-record'` 获得 `ctx.alertRecords` 的类型（`index.d.ts`）。
+
+| 方法 | 说明 |
+| --- | --- |
+| `tree()` | 库目录树（含模板数、记录数） |
+| `settings()` / `uploadLimit()` | 当前存储方式与上传上限 |
+| `getDirectory(id)` / `createDirectory(input)` / `updateDirectory(input)` / `deleteDirectory(id)` | 库目录 |
+| `getTemplate(id)` / `listTemplates(nodeId?)` / `createTemplate(input)` / `updateTemplate(input)` / `deleteTemplate(id)` | 预警模板 |
+| `getRecord(id)` / `listRecords(filter)` / `createRecord(input)` / `updateRecord(id, input)` / `deleteRecord(id)` | 预警记录 |
+| `uploadFile({ fieldKey, name, contentType, bytes })` | 上传图片/视频/音频，返回文件 id |
+| `fileResponse(request, download)` | 输出媒体响应（支持 Range） |
+
+### 给大模型（Agent Tools）
+
+插件注册 14 个模型工具，覆盖目录、模板、记录的完整增删改查和媒体上传：
+
+| 分类 | 工具 |
+| --- | --- |
+| 目录 | `list_alert_directories`、`create_alert_directory`、`update_alert_directory`、`delete_alert_directory` |
+| 模板 | `list_alert_templates`、`create_alert_template`、`update_alert_template`、`delete_alert_template` |
+| 记录 | `list_alert_records`、`get_alert_record`、`create_alert_record`、`update_alert_record`、`delete_alert_record` |
+| 媒体 | `upload_alert_file`（base64 上传，返回文件 id 后可写入记录的媒体字段） |
+
+典型调用顺序：`list_alert_directories` → `list_alert_templates`（拿到字段 `key`）→ `create_alert_record`（`values` 按字段 key 传数字/字符）→ 需要附件时 `upload_alert_file` → `update_alert_record` 把文件 id 放进媒体字段的数组。
 
 ## 结构
 
 | 文件 | 作用 |
 | --- | --- |
 | `index.js` | Host：存储选择（PostgreSQL / 本地 JSON）、MinIO / 本地媒体、Fetch 路由、Agent 工具 |
+| `index.d.ts` | 供其他 TypeScript 插件使用的 `alertRecords` 服务类型 |
 | `client.js` | 浏览器：侧边栏入口、库目录树、模板与记录页面、媒体上传与播放 |
 | `cordis.patch.yml` | 插入 `dsh-record` 插件行 |
 | `locale/*.json` | 插件管理器中的标题与说明 |
@@ -104,7 +161,7 @@ A DeepSeek Harness plugin for **alert records**. Multi-level directories (each o
   - With the database plugin (`dsh-database-config`): directories, templates, records, and the file index go to **PostgreSQL**; media files go to **MinIO**.
   - Without it: the same data goes to `$DSH_HOME/dsh-record/data.json` and media files to `$DSH_HOME/dsh-record/media/`.
   - Header badges always show the storage actually in use.
-- **Agent tools**: `list_alert_directories`, `create_alert_directory`, `list_alert_templates`, `create_alert_template`, `list_alert_records`, `create_alert_record`, `delete_alert_record`.
+- **Agent tools (14)**: directories `list_alert_directories`, `create_alert_directory`, `update_alert_directory`, `delete_alert_directory`; templates `list_alert_templates`, `create_alert_template`, `update_alert_template`, `delete_alert_template`; records `list_alert_records`, `get_alert_record`, `create_alert_record`, `update_alert_record`, `delete_alert_record`; media `upload_alert_file`.
 
 ## Configuration
 
@@ -140,13 +197,70 @@ Header badges show `PostgreSQL` / `Local files` and `MinIO` / `Local disk`.
 - Media files are never exposed as public URLs; the plugin's authenticated routes stream them, and HTTP Range requests let video and audio seek.
 - When the database plugin is installed but PostgreSQL is down, the routes fail with `database-unavailable` and the page explains the problem; the plugin does not silently write local files, which would split the data.
 - HTTP routes under `api/record`: `tree`, `nodes`, `templates`, `records`, `upload`, `file/content`, `file/download`.
-- Other plugins can inject `ctx.alertRecords` and share the same implementation.
+
+## Callable capabilities
+
+### For other plugins (Cordis Service)
+
+Every capability is registered as the Cordis service `alertRecords`; other Host plugins and the model tools call the same implementation:
+
+```js
+export const inject = ['alertRecords']
+
+export async function apply(ctx) {
+  const { nodes } = await ctx.alertRecords.tree()
+  const [template] = await ctx.alertRecords.listTemplates(nodes[0].id)
+  const record = await ctx.alertRecords.createRecord({
+    nodeId: nodes[0].id,
+    templateId: template.id,
+    title: 'Furnace 3 temperature above limit',
+    severity: 'high',
+    values: { [template.fields[0].key]: 88.6 },
+  })
+  const full = await ctx.alertRecords.getRecord(record.id)
+  const file = await ctx.alertRecords.uploadFile({
+    fieldKey: template.fields[2].key,
+    name: 'photo.png',
+    contentType: 'image/png',
+    bytes: pngBytes,
+  })
+  await ctx.alertRecords.updateRecord(record.id, {
+    values: { ...full.values, [template.fields[2].key]: [file.id] },
+  })
+}
+```
+
+TypeScript plugins can `import type {} from 'dsh-record'` to type `ctx.alertRecords` (`index.d.ts`).
+
+| Method | Purpose |
+| --- | --- |
+| `tree()` | Directory tree with template and record counts |
+| `settings()` / `uploadLimit()` | Current storage mode and upload limit |
+| `getDirectory(id)` / `createDirectory(input)` / `updateDirectory(input)` / `deleteDirectory(id)` | Directories |
+| `getTemplate(id)` / `listTemplates(nodeId?)` / `createTemplate(input)` / `updateTemplate(input)` / `deleteTemplate(id)` | Templates |
+| `getRecord(id)` / `listRecords(filter)` / `createRecord(input)` / `updateRecord(id, input)` / `deleteRecord(id)` | Records |
+| `uploadFile({ fieldKey, name, contentType, bytes })` | Store an image, video, or audio file and return its id |
+| `fileResponse(request, download)` | Stream a stored file, honouring HTTP Range |
+
+### For the model (Agent tools)
+
+The plugin registers 14 tools covering directory, template, and record CRUD plus media upload:
+
+| Group | Tools |
+| --- | --- |
+| Directories | `list_alert_directories`, `create_alert_directory`, `update_alert_directory`, `delete_alert_directory` |
+| Templates | `list_alert_templates`, `create_alert_template`, `update_alert_template`, `delete_alert_template` |
+| Records | `list_alert_records`, `get_alert_record`, `create_alert_record`, `update_alert_record`, `delete_alert_record` |
+| Media | `upload_alert_file` (base64 upload; returns the file id to put in a media field) |
+
+Typical order: `list_alert_directories` → `list_alert_templates` (read the field `key`s) → `create_alert_record` (pass numbers and strings in `values`) → `upload_alert_file` for attachments → `update_alert_record` with the file id in the media field array.
 
 ## Layout
 
 | File | Role |
 | --- | --- |
 | `index.js` | Host: storage selection (PostgreSQL / local JSON), MinIO / local media, Fetch routes, Agent tools |
+| `index.d.ts` | `alertRecords` service types for other TypeScript plugins |
 | `client.js` | Browser: sidebar entry, library tree, template and record pages, media upload and playback |
 | `cordis.patch.yml` | Inserts the `dsh-record` plugin row |
 | `locale/*.json` | Title and description in the plugin manager |

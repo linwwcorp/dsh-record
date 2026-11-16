@@ -1402,6 +1402,57 @@ export class AlertRecordsService extends Service {
   }
 
   /**
+   * @param id - directory id.
+   * @returns one directory with its template and record counts.
+   */
+  async getDirectory(id) {
+    const directoryId = normalizeId(id, 'Directory id')
+    const provider = this.storage.provider()
+    const [nodes, templates, records] = await Promise.all([
+      provider.nodes(),
+      provider.templates(),
+      provider.records(),
+    ])
+    const node = nodes.find(candidate => candidate.id === directoryId)
+    if (node === undefined) throw new AlertError('not-found', 'The directory was not found', 404)
+    return projectDirectory(node, templates, records)
+  }
+
+  /**
+   * @param id - template id.
+   * @returns one template with its record count.
+   */
+  async getTemplate(id) {
+    const templateId = normalizeId(id, 'Template id')
+    const provider = this.storage.provider()
+    const [templates, records] = await Promise.all([
+      provider.templates(),
+      provider.records(),
+    ])
+    const template = templates.find(candidate => candidate.id === templateId)
+    if (template === undefined) throw new AlertError('not-found', 'The template was not found', 404)
+    return projectTemplate(template, records.filter(record => record.templateId === templateId).length)
+  }
+
+  /**
+   * @param id - record id.
+   * @returns one record with its template name, field values, and stored files.
+   */
+  async getRecord(id) {
+    const recordId = normalizeId(id, 'Record id')
+    const provider = this.storage.provider()
+    const [templates, records, files] = await Promise.all([
+      provider.templates(),
+      provider.records(),
+      provider.files(),
+    ])
+    const record = records.find(candidate => candidate.id === recordId)
+    if (record === undefined) throw new AlertError('not-found', 'The alert record was not found', 404)
+    const template = templates.find(candidate => candidate.id === record.templateId)
+    return projectRecord(record, template, files)
+  }
+
+  /**
    * @param filter - `{ nodeId?, templateId?, query?, limit?, offset? }`.
    * @returns matching records newest first and the full match count.
    */
@@ -1972,6 +2023,43 @@ function toolRecord(record) {
   }
 }
 
+const FILE_PROPERTIES = {
+  id: { type: 'string', required: true },
+  fieldKey: { type: 'string', required: true },
+  kind: { type: 'string', required: true },
+  name: { type: 'string', required: true },
+  contentType: { type: 'string', required: true },
+  sizeBytes: { type: 'integer', required: true },
+  storage: { type: 'string', required: true },
+  contentUrl: { type: 'string', required: true },
+  downloadUrl: { type: 'string', required: true },
+}
+
+/** @returns one stored file for a tool result. */
+function toolFile(file) {
+  return {
+    id: file.id,
+    fieldKey: file.fieldKey,
+    kind: file.kind,
+    name: file.name,
+    contentType: file.contentType,
+    sizeBytes: file.sizeBytes,
+    storage: file.storage,
+    contentUrl: file.contentUrl,
+    downloadUrl: file.downloadUrl,
+  }
+}
+
+/** @returns one record with its stored files for a tool result. */
+function toolRecordDetail(record) {
+  return {
+    ...toolRecord(record),
+    files: record.files.map(toolFile),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }
+}
+
 /**
  * Register the model tools that read and write the alert record library.
  * @param ctx - Host context.
@@ -2335,6 +2423,290 @@ function registerTools(ctx, service) {
             const id = await service.deleteRecord(args.id)
             exec.signal.throwIfAborted()
             return { id }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'get_alert_record',
+          description: 'Read one alert record by id, including every field value and each stored image, video, '
+            + 'or audio file with its relative content and download URL. '
+            + 'Use list_alert_records first to find the record id.',
+          parameters: {
+            id: { type: 'string', required: true, description: 'Alert record id.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                record: {
+                  type: 'object',
+                  required: true,
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: 'string', required: true },
+                    nodeId: { type: 'string', required: true },
+                    templateId: { type: 'string', required: true },
+                    templateName: { type: 'string', required: true },
+                    title: { type: 'string', required: true },
+                    severity: { type: 'string', required: true },
+                    occurredAt: { type: 'string', required: true },
+                    note: { type: 'string', required: true },
+                    values: { type: 'json', required: true },
+                    fileCount: { type: 'integer', required: true },
+                    files: {
+                      type: 'array',
+                      required: true,
+                      items: { type: 'object', additionalProperties: false, properties: FILE_PROPERTIES },
+                    },
+                    createdAt: { type: 'string', required: true },
+                    updatedAt: { type: 'string', required: true },
+                  },
+                },
+              },
+            },
+            render: (_args, value) => {
+              const record = value.record
+              const files = record.files.length === 0
+                ? 'none'
+                : record.files.map(file => `${file.kind}:${file.name}`).join(', ')
+              return [{
+                type: 'text',
+                text: `Alert record "${record.title}" (id ${record.id}, template ${record.templateName || record.templateId})\n`
+                  + `severity=${record.severity || 'none'} occurred=${record.occurredAt}\n`
+                  + `values=${JSON.stringify(record.values)}\n`
+                  + `note=${JSON.stringify(record.note)}\n`
+                  + `files=${files}`,
+              }]
+            },
+          },
+          presentCall: args => ({ card: 'generic', kind: 'search', title: `Read alert record ${args.id}` }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const record = await service.getRecord(args.id)
+            exec.signal.throwIfAborted()
+            return { record: toolRecordDetail(record) }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'update_alert_record',
+          description: 'Update one alert record. Omitted fields keep their value. A supplied `values` object '
+            + 'replaces the whole value map, keyed by template field key; number fields take numbers and text '
+            + 'fields take strings. Media fields take arrays of file ids returned by upload_alert_file. '
+            + 'Use get_alert_record first to read the current values.',
+          parameters: {
+            id: { type: 'string', required: true, description: 'Alert record id from list_alert_records.' },
+            title: { type: 'string', description: 'New title.' },
+            severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'], description: 'New severity.' },
+            occurredAt: { type: 'string', description: 'New ISO 8601 occurrence timestamp.' },
+            note: { type: 'string', description: 'New note; an empty string clears it.' },
+            values: { type: 'json', description: 'Complete replacement value map keyed by template field key.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                record: { type: 'object', required: true, additionalProperties: false, properties: RECORD_PROPERTIES },
+              },
+            },
+            render: (_args, value) => [{ type: 'text', text: `Updated alert record "${value.record.title}" (id ${value.record.id}).` }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'edit', title: `Update alert record ${args.id}` }),
+          presentResult: (args, result) => result.isError ? undefined : ({
+            card: 'generic',
+            title: `Updated alert record ${args.id}`,
+          }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const record = await service.updateRecord(args.id, args)
+            exec.signal.throwIfAborted()
+            return { record: toolRecord(record) }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'update_alert_directory',
+          description: 'Rename one alert library directory or change its description. '
+            + 'Omitted fields keep their value. Use list_alert_directories first to find the directory id.',
+          parameters: {
+            id: { type: 'string', required: true, description: 'Directory id from list_alert_directories.' },
+            name: { type: 'string', description: 'New directory name, unique under its parent.' },
+            description: { type: 'string', description: 'New description; an empty string clears it.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                directory: { type: 'object', required: true, additionalProperties: false, properties: DIRECTORY_PROPERTIES },
+              },
+            },
+            render: (_args, value) => [{ type: 'text', text: `Updated alert library "${value.directory.name}" (id ${value.directory.id}).` }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'edit', title: `Update alert library ${args.id}` }),
+          presentResult: (args, result) => result.isError ? undefined : ({
+            card: 'generic',
+            title: `Updated alert library ${args.id}`,
+          }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const directory = await service.updateDirectory(args)
+            exec.signal.throwIfAborted()
+            return { directory: toolDirectory(directory) }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'delete_alert_directory',
+          description: 'Delete one alert library directory together with its child libraries, templates, '
+            + 'records, and stored files. This cannot be undone; prefer deleting single records when the '
+            + 'directory should stay.',
+          parameters: {
+            id: { type: 'string', required: true, description: 'Directory id from list_alert_directories.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { id: { type: 'string', required: true } },
+            },
+            render: (_args, value) => [{ type: 'text', text: `Deleted alert library id ${value.id} with everything inside it.` }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'delete', title: `Delete alert library ${args.id}` }),
+          presentResult: (args, result) => result.isError ? undefined : ({
+            card: 'generic',
+            title: `Deleted alert library ${args.id}`,
+          }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const id = await service.deleteDirectory(args.id)
+            exec.signal.throwIfAborted()
+            return { id }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'update_alert_template',
+          description: 'Update one alert template. Omitted fields keep their value. A supplied `fields` array '
+            + 'replaces the whole field list; keep each field `key` from list_alert_templates to preserve the '
+            + 'values already stored under it. A field type cannot change while records use the template.',
+          parameters: {
+            id: { type: 'string', required: true, description: 'Template id from list_alert_templates.' },
+            name: { type: 'string', description: 'New template name.' },
+            description: { type: 'string', description: 'New description; an empty string clears it.' },
+            fields: {
+              type: 'array',
+              description: 'Complete replacement field list. At least one field.',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  key: { type: 'string', description: 'Existing field key to keep; omit to assign a new one.' },
+                  label: { type: 'string', required: true, description: 'Field label.' },
+                  type: { type: 'string', required: true, enum: FIELD_TYPES, description: 'Field type.' },
+                  unit: { type: 'string', description: 'Unit after a number value.' },
+                  required: { type: 'boolean', description: 'Whether a record must provide this field.' },
+                },
+              },
+            },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                template: { type: 'object', required: true, additionalProperties: false, properties: TEMPLATE_PROPERTIES },
+              },
+            },
+            render: (_args, value) => [{ type: 'text', text: `Updated alert template "${value.template.name}" (id ${value.template.id}).` }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'edit', title: `Update alert template ${args.id}` }),
+          presentResult: (args, result) => result.isError ? undefined : ({
+            card: 'generic',
+            title: `Updated alert template ${args.id}`,
+          }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const template = await service.updateTemplate(args)
+            exec.signal.throwIfAborted()
+            return { template: toolTemplate(template) }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'delete_alert_template',
+          description: 'Delete one alert template. A template that still has records is refused, so delete '
+            + 'those records first. Use list_alert_templates to find the template id.',
+          parameters: {
+            id: { type: 'string', required: true, description: 'Template id from list_alert_templates.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { id: { type: 'string', required: true } },
+            },
+            render: (_args, value) => [{ type: 'text', text: `Deleted alert template id ${value.id}.` }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'delete', title: `Delete alert template ${args.id}` }),
+          presentResult: (args, result) => result.isError ? undefined : ({
+            card: 'generic',
+            title: `Deleted alert template ${args.id}`,
+          }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const id = await service.deleteTemplate(args.id)
+            exec.signal.throwIfAborted()
+            return { id }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'upload_alert_file',
+          description: 'Upload one image, video, or audio file for an alert record and return its file id. '
+            + 'Pass the id in a media field value (an array of ids) of create_alert_record or update_alert_record. '
+            + '`data` is base64, with or without a data URL prefix. The content URLs in the result are relative '
+            + 'to the Harness Web origin.',
+          parameters: {
+            data: { type: 'string', required: true, description: 'Base64 file bytes, optionally as a data URL.' },
+            contentType: { type: 'string', required: true, description: 'Media type, such as image/png or video/mp4.' },
+            name: { type: 'string', description: 'Original file name, including its extension.' },
+            fieldKey: { type: 'string', description: 'Template field key that will hold this file.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                file: { type: 'object', required: true, additionalProperties: false, properties: FILE_PROPERTIES },
+              },
+            },
+            render: (_args, value) => [{
+              type: 'text',
+              text: `Uploaded ${value.file.kind} "${value.file.name}" (id ${value.file.id}, ${value.file.sizeBytes} bytes).`,
+            }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'edit', title: `Upload ${args.contentType} file for an alert record` }),
+          presentResult: (args, result) => result.isError ? undefined : ({
+            card: 'generic',
+            title: `Uploaded alert file ${result.value?.file?.name ?? ''}`.trim(),
+          }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const raw = typeof args.data === 'string' ? args.data.trim() : ''
+            const match = /^data:[^;,]*;base64,(.*)$/s.exec(raw)
+            const bytes = Buffer.from(match === null ? raw : match[1], 'base64')
+            if (bytes.length === 0) throw new Error('The file data is not valid base64')
+            const file = await service.uploadFile({
+              fieldKey: args.fieldKey ?? '',
+              name: args.name ?? '',
+              contentType: args.contentType,
+              bytes,
+            })
+            exec.signal.throwIfAborted()
+            return { file: toolFile(file) }
           },
         })),
       ]

@@ -6,13 +6,17 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./index.js",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
     "./client": "./client.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg"
   },
   "files": [
     "index.js",
+    "index.d.ts",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
@@ -38,5 +42,6 @@
         "@deepseek-ai/dsh-client-ui-settings"
       ]
     }
-  }
+  },
+  "types": "./index.d.ts"
 }

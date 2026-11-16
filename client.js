@@ -2116,6 +2116,18 @@ window.__ModuleLoader__.load({
             title: t('tree.recordCount', { count: String(typeof node.recordCount === 'number' ? node.recordCount : 0) }),
           }, String(typeof node.recordCount === 'number' ? node.recordCount : 0)),
           h('span', { className: 'dsh-record-tree-actions' },
+            depth === 0 ? h('button', {
+              type: 'button',
+              className: 'dsh-record-tree-action',
+              'aria-label': t('tree.newChild'),
+              title: t('tree.newChild'),
+              onClick: (event) => {
+                event.stopPropagation()
+                selectNode(node.id)
+                setExpanded(current => current.includes(node.id) ? current : [...current, node.id])
+                setNodeDialog({ mode: 'create', parentId: node.id, target: null })
+              },
+            }, h(Icon, { name: 'plus', size: 12 })) : null,
             h('button', {
               type: 'button',
               className: 'dsh-record-tree-action',
@@ -2163,41 +2175,6 @@ window.__ModuleLoader__.load({
             title: t('tree.newRoot'),
             onClick: () => setNodeDialog({ mode: 'create', parentId: null, target: null }),
           }, h(Icon, { name: 'plus' })),
-          h('button', {
-            type: 'button',
-            className: 'dsh-record-icon-button',
-            'aria-label': t('tree.newChild'),
-            title: t('tree.newChild'),
-            disabled: selectedNode === null,
-            onClick: () => {
-              if (selectedNode === null) return
-              setExpanded(current => current.includes(selectedNode.id) ? current : [...current, selectedNode.id])
-              setNodeDialog({ mode: 'create', parentId: selectedNode.id, target: null })
-            },
-          }, h(Icon, { name: 'folder' })),
-          h('button', {
-            type: 'button',
-            className: 'dsh-record-icon-button',
-            'aria-label': t('tree.rename'),
-            title: t('tree.rename'),
-            disabled: selectedNode === null,
-            onClick: () => {
-              if (selectedNode === null) return
-              setNodeDialog({ mode: 'edit', parentId: selectedNode.parentId, target: selectedNode })
-            },
-          }, h(Icon, { name: 'edit' })),
-          h('button', {
-            type: 'button',
-            className: 'dsh-record-icon-button',
-            'aria-label': t('tree.delete'),
-            title: t('tree.delete'),
-            disabled: selectedNode === null,
-            onClick: () => {
-              if (selectedNode === null) return
-              setDeleteError(null)
-              setDeleteTarget({ kind: 'node', id: selectedNode.id, name: selectedNode.name })
-            },
-          }, h(Icon, { name: 'trash' })),
           h('button', {
             type: 'button',
             className: 'dsh-record-icon-button',
