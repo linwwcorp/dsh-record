@@ -432,6 +432,10 @@ window.__ModuleLoader__.load({
 .dsh-record-tab:hover { color: var(--dsw-alias-label-primary); }
 .dsh-record-tab-active { border-bottom-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary); }
 .dsh-record-content { flex: 1; min-height: 0; overflow: auto; padding: 14px 22px 40px; }
+.dsh-record-content-fill {
+  display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0;
+}
+.dsh-record-content-fill > .dsh-record-banner { flex: none; }
 .dsh-record-toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .dsh-record-inline-field { display: grid; gap: 4px; min-width: 0; }
 .dsh-record-inline-field > span { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 16px; }
@@ -536,9 +540,15 @@ window.__ModuleLoader__.load({
   border: 0.5px solid var(--dsw-alias-border-l1); border-radius: 14px;
   background: var(--dsw-alias-bg-layer-1); overflow: hidden;
 }
+.dsh-record-records { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.dsh-record-records > .dsh-record-toolbar { flex: none; }
+.dsh-record-records-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 12px; }
 .dsh-record-pager {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
-  padding: 12px 2px 0; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: none; flex-wrap: wrap;
+  margin-top: 0; padding: 10px 2px 14px;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
 }
 .dsh-record-pager-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dsh-record-pager-info { font-variant-numeric: tabular-nums; }
@@ -748,6 +758,10 @@ window.__ModuleLoader__.load({
   }
   .dsh-record-main { min-height: 0; overflow: visible; }
   .dsh-record-content { overflow: visible; padding-left: 16px; padding-right: 16px; }
+  .dsh-record-content-fill { display: block; overflow: visible; padding-bottom: 40px; }
+  .dsh-record-records { display: block; }
+  .dsh-record-records-scroll { overflow: visible; padding-bottom: 0; }
+  .dsh-record-pager { padding: 14px 2px 0; border-top: 0; }
   .dsh-record-main-head { padding-left: 16px; padding-right: 16px; }
   .dsh-record-tabs { padding-left: 16px; padding-right: 16px; }
   .dsh-record-col-template, .dsh-record-col-values { display: none; }
@@ -2464,9 +2478,9 @@ window.__ModuleLoader__.load({
             h('p', null, recordsError),
             h('button', { type: 'button', className: 'dsh-record-small-button', onClick: refresh }, t('action.retry'))),
           tab === 'records'
-            ? h(React.Fragment, null,
+            ? h('div', { className: 'dsh-record-records' },
               recordsToolbar,
-              recordsBody,
+              h('div', { className: 'dsh-record-records-scroll' }, recordsBody),
               recordsPager)
             : h(React.Fragment, null, templatesToolbar, templatesBody))
       const mainPane = h('main', { className: 'dsh-record-main' },
@@ -2486,7 +2500,11 @@ window.__ModuleLoader__.load({
                   `${t('header.templates', { count: String(templates.length) })} · `
                   + t('header.records', { count: String(typeof selectedNode.recordCount === 'number' ? selectedNode.recordCount : 0) }))))),
         selectedNode === null ? null : tabs,
-        h('div', { className: 'dsh-record-content' }, content))
+        h('div', {
+          className: selectedNode !== null && tab === 'records'
+            ? 'dsh-record-content dsh-record-content-fill'
+            : 'dsh-record-content',
+        }, content))
       const retryButton = h('button', {
         key: 'retry',
         type: 'button',
